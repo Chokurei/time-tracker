@@ -2,7 +2,7 @@
 async function initializeFirebase() {
     try {
         // 动态导入Firebase模块
-        const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
+        const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
         const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
         const { getFirestore } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
 
@@ -13,12 +13,12 @@ async function initializeFirebase() {
         // 3. 点击"项目设置" > "常规" > "您的应用" > "网络应用"
         // 4. 复制配置对象并替换下面的值
         const firebaseConfig = {
-            apiKey: "your-api-key-here",                    // 从Firebase控制台获取
-            authDomain: "your-project.firebaseapp.com",     // 格式：项目ID.firebaseapp.com
-            projectId: "your-project-id",                   // 您的Firebase项目ID
-            storageBucket: "your-project.appspot.com",      // 格式：项目ID.appspot.com
-            messagingSenderId: "123456789",                 // 数字ID
-            appId: "your-app-id"                           // 应用ID，格式：1:数字:web:字符串
+            apiKey: "AIzaSyDBfeHd48RAqmG68g5pqOIAxSpi8kp37Wo",                    // 从Firebase控制台获取
+            authDomain: "time-tracker-9ac34.firebaseapp.com",     // 格式：项目ID.firebaseapp.com
+            projectId: "time-tracker-9ac34",                   // 您的Firebase项目ID
+            storageBucket: "time-tracker-9ac34.firebasestorage.app",      // 格式：项目ID.appspot.com
+            messagingSenderId: "1065078932153",                 // 数字ID
+            appId: "1:1065078932153:web:0107c591416f57333c9168"                           // 应用ID，格式：1:数字:web:字符串
         };
 
         // 检查配置是否已更新
@@ -29,8 +29,15 @@ async function initializeFirebase() {
             return false;
         }
 
-        // 初始化Firebase
-        const app = initializeApp(firebaseConfig);
+        // 初始化Firebase（检查是否已经初始化）
+        let app;
+        try {
+            app = getApp(); // 尝试获取已存在的应用
+        } catch (error) {
+            // 如果应用不存在，则初始化新应用
+            app = initializeApp(firebaseConfig);
+        }
+        
         window.auth = getAuth(app);
         window.db = getFirestore(app);
 
