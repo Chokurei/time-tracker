@@ -207,7 +207,10 @@ class AuthManager {
     }
 
     getErrorMessage(error) {
+        console.log('🚨 认证错误详情:', error);
         switch (error.code) {
+            case 'auth/api-key-not-valid':
+                return 'Firebase API密钥无效，请检查配置';
             case 'auth/user-not-found':
                 return '用户不存在，请检查邮箱地址';
             case 'auth/wrong-password':

@@ -16,7 +16,7 @@ async function initializeFirebase() {
             apiKey: "AIzaSyDBfeHd48RAqmG68g5pqOIAxSpi8kp37Wo",                    // 从Firebase控制台获取
             authDomain: "time-tracker-9ac34.firebaseapp.com",     // 格式：项目ID.firebaseapp.com
             projectId: "time-tracker-9ac34",                   // 您的Firebase项目ID
-            storageBucket: "time-tracker-9ac34.firebasestorage.app",      // 格式：项目ID.appspot.com
+            storageBucket: "time-tracker-9ac34.appspot.com",      // 格式：项目ID.appspot.com
             messagingSenderId: "1065078932153",                 // 数字ID
             appId: "1:1065078932153:web:0107c591416f57333c9168"                           // 应用ID，格式：1:数字:web:字符串
         };
@@ -29,19 +29,31 @@ async function initializeFirebase() {
             return false;
         }
 
+        // 调试信息：显示当前配置
+        console.log('🔧 Firebase配置信息:', {
+            apiKey: firebaseConfig.apiKey.substring(0, 10) + '...',
+            authDomain: firebaseConfig.authDomain,
+            projectId: firebaseConfig.projectId,
+            storageBucket: firebaseConfig.storageBucket
+        });
+
         // 初始化Firebase（检查是否已经初始化）
         let app;
         try {
             app = getApp(); // 尝试获取已存在的应用
+            console.log('✅ 使用已存在的Firebase应用');
         } catch (error) {
             // 如果应用不存在，则初始化新应用
+            console.log('🚀 初始化新的Firebase应用');
             app = initializeApp(firebaseConfig);
         }
         
         window.auth = getAuth(app);
         window.db = getFirestore(app);
 
-        console.log('Firebase初始化成功');
+        console.log('✅ Firebase初始化成功');
+        console.log('🔐 Auth对象:', window.auth ? '已创建' : '创建失败');
+        console.log('🗄️ Firestore对象:', window.db ? '已创建' : '创建失败');
         return true;
     } catch (error) {
         console.error('Firebase初始化失败:', error);
@@ -130,5 +142,13 @@ function showFirebaseConfigWarning() {
 window.showFirebaseConfigWarning = showFirebaseConfigWarning;
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // 清除可能的缓存问题
+    if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let registration of registrations) {
+            registration.unregister();
+        }
+    }
+    
     await initializeFirebase();
 });
