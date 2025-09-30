@@ -7,8 +7,11 @@ class TimeTracker {
         this.pausedTime = 0;
         this.currentActivity = null;
         this.timer = null;
-        this.records = this.loadRecords();
+        this.records = [];
         this.currentMonth = new Date();
+        this.currentUser = null;
+        this.isOffline = false;
+        this.pendingSync = [];
         
         this.initializeElements();
         this.bindEvents();
@@ -16,6 +19,20 @@ class TimeTracker {
         this.renderCalendar();
         this.renderTodayStats();
         this.renderRecords();
+    }
+
+    // 为用户初始化数据
+    async initializeForUser(user) {
+        this.currentUser = user;
+        this.records = [];
+        
+        if (user) {
+            await this.loadUserRecords();
+            this.updateDisplay();
+            this.renderCalendar();
+            this.renderTodayStats();
+            this.renderRecords();
+        }
     }
 
     initializeElements() {
@@ -107,21 +124,27 @@ class TimeTracker {
         }
     }
 
-    stop() {
+    async stop() {
         if (this.isRunning) {
-            const duration = this.isPaused ? this.pausedTime : Date.now() - this.startTime;
+            const endTime = new Date();
+            const duration = this.isPaused ? this.pausedTime : endTime.getTime() - this.startTime.getTime();
             
             // 保存记录
-            this.saveRecord({
+            await this.saveRecord({
                 activity: this.currentActivity,
-                type: this.activityTypeEl.value,
-                startTime: this.startTime,
+                startTime: new Date(this.startTime),
+                endTime: endTime,
                 duration: duration,
-                date: new Date().toDateString()
+                date: endTime.toDateString()
             });
             
             // 重置状态
             this.reset();
+            
+            // 更新显示
+            this.renderTodayStats();
+            this.renderRecords();
+            this.renderCalendar();
         }
     }
 
@@ -230,26 +253,171 @@ class TimeTracker {
         }
     }
 
-    saveRecord(record) {
+    async saveRecord(record) {
         this.records.push(record);
-        this.saveRecords();
+        await this.saveUserRecords();
     }
 
-    loadRecords() {
+    // 加载用户记录
+    async loadUserRecords() {
+        if (!this.currentUser) return;
+
         try {
-            const saved = localStorage.getItem('timeTrackerRecords');
-            return saved ? JSON.parse(saved) : [];
+            if (window.authManager && window.authManager.isGuest()) {
+                // 游客模式使用本地存储
+                this.records = this.loadLocalRecords();
+                return;
+            }
+
+            if (!window.db) {
+                console.warn('Firestore未初始化，使用本地存储');
+                this.records = this.loadLocalRecords();
+                return;
+            }
+
+            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            
+            const recordsRef = collection(window.db, 'timeRecords');
+            const q = query(
+                recordsRef, 
+                where('userId', '==', this.currentUser.uid),
+                orderBy('startTime', 'desc')
+            );
+            
+            const querySnapshot = await getDocs(q);
+            this.records = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                this.records.push({
+                    ...data,
+                    id: doc.id,
+                    startTime: data.startTime.toDate(),
+                    endTime: data.endTime.toDate()
+                });
+            });
+
+            console.log(`加载了 ${this.records.length} 条记录`);
+            this.isOffline = false;
+            
+        } catch (error) {
+            console.error('加载云端记录失败:', error);
+            this.isOffline = true;
+            this.records = this.loadLocalRecords();
+        }
+    }
+
+    // 保存用户记录
+    async saveUserRecords() {
+        if (!this.currentUser) return;
+
+        try {
+            if (window.authManager && window.authManager.isGuest()) {
+                // 游客模式使用本地存储
+                this.saveLocalRecords();
+                return;
+            }
+
+            if (!window.db) {
+                console.warn('Firestore未初始化，保存到本地');
+                this.saveLocalRecords();
+                this.addToPendingSync();
+                return;
+            }
+
+            // 保存最新的记录到云端
+            const latestRecord = this.records[this.records.length - 1];
+            if (latestRecord && !latestRecord.id) {
+                await this.saveRecordToCloud(latestRecord);
+            }
+
+            // 同时保存到本地作为备份
+            this.saveLocalRecords();
+            this.isOffline = false;
+            
+        } catch (error) {
+            console.error('保存云端记录失败:', error);
+            this.isOffline = true;
+            this.saveLocalRecords();
+            this.addToPendingSync();
+        }
+    }
+
+    // 保存单条记录到云端
+    async saveRecordToCloud(record) {
+        if (!window.db || !this.currentUser) return;
+
+        try {
+            const { collection, addDoc, Timestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            
+            const recordsRef = collection(window.db, 'timeRecords');
+            const docRef = await addDoc(recordsRef, {
+                userId: this.currentUser.uid,
+                activity: record.activity,
+                startTime: Timestamp.fromDate(record.startTime),
+                endTime: Timestamp.fromDate(record.endTime),
+                duration: record.duration,
+                date: record.date
+            });
+
+            // 更新本地记录的ID
+            record.id = docRef.id;
+            console.log('记录已保存到云端:', docRef.id);
+            
+        } catch (error) {
+            console.error('保存记录到云端失败:', error);
+            throw error;
+        }
+    }
+
+    // 本地存储方法
+    loadLocalRecords() {
+        try {
+            const key = this.currentUser ? `timeTrackerRecords_${this.currentUser.uid}` : 'timeTrackerRecords';
+            const saved = localStorage.getItem(key);
+            const records = saved ? JSON.parse(saved) : [];
+            
+            // 转换日期字符串为Date对象
+            return records.map(record => ({
+                ...record,
+                startTime: new Date(record.startTime),
+                endTime: new Date(record.endTime)
+            }));
         } catch (e) {
-            console.error('加载记录失败:', e);
+            console.error('加载本地记录失败:', e);
             return [];
         }
     }
 
-    saveRecords() {
+    saveLocalRecords() {
         try {
-            localStorage.setItem('timeTrackerRecords', JSON.stringify(this.records));
+            const key = this.currentUser ? `timeTrackerRecords_${this.currentUser.uid}` : 'timeTrackerRecords';
+            localStorage.setItem(key, JSON.stringify(this.records));
         } catch (e) {
-            console.error('保存记录失败:', e);
+            console.error('保存本地记录失败:', e);
+        }
+    }
+
+    // 添加到待同步队列
+    addToPendingSync() {
+        const latestRecord = this.records[this.records.length - 1];
+        if (latestRecord && !latestRecord.id) {
+            this.pendingSync.push(latestRecord);
+        }
+    }
+
+    // 同步待处理的记录
+    async syncPendingRecords() {
+        if (this.pendingSync.length === 0 || !window.db || !this.currentUser) return;
+
+        try {
+            for (const record of this.pendingSync) {
+                await this.saveRecordToCloud(record);
+            }
+            this.pendingSync = [];
+            console.log('待同步记录已全部同步完成');
+        } catch (error) {
+            console.error('同步待处理记录失败:', error);
         }
     }
 

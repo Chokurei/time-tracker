@@ -3,34 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>时间记录器 - 高效时间管理工具</title>
-    <meta name="description" content="一个简洁美观的交互式时间记录器，帮助你记录和分析时间分配情况，提高工作效率和时间管理能力。">
-    <meta name="keywords" content="时间记录器,时间管理,效率工具,计时器,时间统计,工作记录">
+    <title>时间记录器 - Time Tracker</title>
+    <meta name="description" content="一个简洁高效的时间记录器，帮助你追踪和管理时间，提高工作效率。支持多种活动分类、统计分析和历史记录查看。">
+    <meta name="keywords" content="时间记录器,时间管理,效率工具,时间追踪,工作记录,Time Tracker">
     <meta name="author" content="Time Tracker">
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="时间记录器 - 高效时间管理工具">
-    <meta property="og:description" content="一个简洁美观的交互式时间记录器，帮助你记录和分析时间分配情况。">
-    <meta property="og:url" content="">
+    <meta property="og:url" content="https://chokurei.github.io/time-tracker">
+    <meta property="og:title" content="时间记录器 - Time Tracker">
+    <meta property="og:description" content="一个简洁高效的时间记录器，帮助你追踪和管理时间，提高工作效率。">
     
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:title" content="时间记录器 - 高效时间管理工具">
-    <meta property="twitter:description" content="一个简洁美观的交互式时间记录器，帮助你记录和分析时间分配情况。">
+    <meta property="twitter:url" content="https://chokurei.github.io/time-tracker">
+    <meta property="twitter:title" content="时间记录器 - Time Tracker">
+    <meta property="twitter:description" content="一个简洁高效的时间记录器，帮助你追踪和管理时间，提高工作效率。">
     
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏰</text></svg>">
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Firebase配置 - 用户需要替换为自己的配置
+        const firebaseConfig = {
+            // 这里需要用户自己的Firebase配置
+            // 暂时使用占位符，用户需要替换
+            apiKey: "your-api-key",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "your-app-id"
+        };
+        
+        // 初始化Firebase
+        window.firebaseApp = initializeApp(firebaseConfig);
+        window.auth = getAuth(window.firebaseApp);
+        window.db = getFirestore(window.firebaseApp);
+    </script>
     
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head> 
 <body>
-    <div class="container">
+    <!-- 用户认证界面 -->
+    <div id="auth-container" class="auth-container">
+        <div class="auth-card">
+            <h2>⏰ 时间记录器</h2>
+            <p>登录以同步你的数据</p>
+            
+            <div id="login-form" class="auth-form">
+                <input type="email" id="email" placeholder="邮箱地址" required>
+                <input type="password" id="password" placeholder="密码" required>
+                <button id="login-btn" class="auth-btn">登录</button>
+                <button id="register-btn" class="auth-btn secondary">注册新账户</button>
+                <button id="guest-btn" class="auth-btn guest">游客模式（仅本地存储）</button>
+            </div>
+            
+            <div id="register-form" class="auth-form hidden">
+                <input type="email" id="reg-email" placeholder="邮箱地址" required>
+                <input type="password" id="reg-password" placeholder="密码（至少6位）" required>
+                <input type="password" id="reg-confirm" placeholder="确认密码" required>
+                <button id="register-submit-btn" class="auth-btn">创建账户</button>
+                <button id="back-to-login-btn" class="auth-btn secondary">返回登录</button>
+            </div>
+            
+            <div id="auth-error" class="auth-error hidden"></div>
+        </div>
+    </div>
+
+    <div class="container" id="main-app" style="display: none;">
         <header class="header">
-            <h1><i class="fas fa-clock"></i> 时间记录器</h1>
-            <p class="subtitle">记录和分析你的时间分配</p>
+            <div class="header-content">
+                <div class="header-left">
+                    <h1><i class="fas fa-clock"></i> 时间记录器</h1>
+                    <p class="subtitle">记录和分析你的时间分配</p>
+                </div>
+                <div class="header-right">
+                    <div class="status-info">
+                        <span id="network-status" class="network-status online">在线</span>
+                        <span id="sync-status" class="sync-status"></span>
+                        <button id="manual-sync-btn" class="sync-btn" title="手动同步">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div id="user-info" class="user-info">
+                        <span id="user-email"></span>
+                        <button id="logout-btn" class="logout-btn">登出</button>
+                    </div>
+                </div>
+            </div>
         </header>
 
         <main class="main-content">
@@ -102,6 +170,9 @@
         </main>
     </div>
 
+    <script src="firebase-config.js"></script>
+    <script src="auth.js"></script>
+    <script src="sync-manager.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
