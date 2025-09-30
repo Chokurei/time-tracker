@@ -13,12 +13,6 @@ async function initializeFirebase() {
         // 3. 点击"项目设置" > "常规" > "您的应用" > "网络应用"
         // 4. 复制配置对象并替换下面的值
         const firebaseConfig = {
-            // apiKey: "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ",
-            // authDomain: "your-project-id.firebaseapp.com",
-            // projectId: "your-project-id",
-            // storageBucket: "your-project-id.appspot.com",
-            // messagingSenderId: "123456789012",
-            // appId: "1:123456789012:web:abcdef1234567890abcdef"
             apiKey: "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus",
             authDomain: "tracker-dc404.firebaseapp.com",
             projectId: "tracker-dc404",
@@ -35,13 +29,15 @@ async function initializeFirebase() {
         console.log('Auth Domain:', firebaseConfig.authDomain);
         console.log('Storage Bucket:', firebaseConfig.storageBucket);
         
-        // 详细检查每个配置项
+        // 详细检查每个配置项 - 只检查明显的示例值
         const isApiKeyValid = firebaseConfig.apiKey && 
-                             firebaseConfig.apiKey !== "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus" && 
-                             firebaseConfig.apiKey !== "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus" &&
-                             !firebaseConfig.apiKey.includes("QQvKqJZ");
+                             firebaseConfig.apiKey !== "your-api-key-here" && 
+                             firebaseConfig.apiKey !== "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ" &&
+                             !firebaseConfig.apiKey.includes("QQvKqJZ") &&
+                             firebaseConfig.apiKey.length > 30; // 真实的API密钥通常很长
         const isProjectIdValid = firebaseConfig.projectId && 
-                                firebaseConfig.projectId !== "tracker-dc404";
+                                firebaseConfig.projectId !== "your-project-id" &&
+                                !firebaseConfig.projectId.includes("your-project");
         
         console.log('配置验证结果:', {
             apiKeyValid: isApiKeyValid,
