@@ -13,12 +13,19 @@ async function initializeFirebase() {
         // 3. 点击"项目设置" > "常规" > "您的应用" > "网络应用"
         // 4. 复制配置对象并替换下面的值
         const firebaseConfig = {
-            apiKey: "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ",
-            authDomain: "your-project-id.firebaseapp.com",
-            projectId: "your-project-id",
-            storageBucket: "your-project-id.appspot.com",
-            messagingSenderId: "123456789012",
-            appId: "1:123456789012:web:abcdef1234567890abcdef"
+            // apiKey: "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ",
+            // authDomain: "your-project-id.firebaseapp.com",
+            // projectId: "your-project-id",
+            // storageBucket: "your-project-id.appspot.com",
+            // messagingSenderId: "123456789012",
+            // appId: "1:123456789012:web:abcdef1234567890abcdef"
+            apiKey: "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus",
+            authDomain: "tracker-dc404.firebaseapp.com",
+            projectId: "tracker-dc404",
+            storageBucket: "tracker-dc404.firebasestorage.app",
+            messagingSenderId: "418770106707",
+            appId: "1:418770106707:web:b2ade92870555f6d3c09a6",
+            measurementId: "G-L424BY5NJF"
         };
 
         // 检查配置是否已更新
@@ -30,11 +37,11 @@ async function initializeFirebase() {
         
         // 详细检查每个配置项
         const isApiKeyValid = firebaseConfig.apiKey && 
-                             firebaseConfig.apiKey !== "your-api-key-here" && 
-                             firebaseConfig.apiKey !== "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ" &&
+                             firebaseConfig.apiKey !== "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus" && 
+                             firebaseConfig.apiKey !== "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus" &&
                              !firebaseConfig.apiKey.includes("QQvKqJZ");
         const isProjectIdValid = firebaseConfig.projectId && 
-                                firebaseConfig.projectId !== "your-project-id";
+                                firebaseConfig.projectId !== "tracker-dc404";
         
         console.log('配置验证结果:', {
             apiKeyValid: isApiKeyValid,
