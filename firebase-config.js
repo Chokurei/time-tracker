@@ -25,10 +25,28 @@ async function initializeFirebase() {
         console.log('🔍 检查Firebase配置...');
         console.log('API Key:', firebaseConfig.apiKey);
         console.log('Project ID:', firebaseConfig.projectId);
+        console.log('Auth Domain:', firebaseConfig.authDomain);
+        console.log('Storage Bucket:', firebaseConfig.storageBucket);
         
-        if (firebaseConfig.apiKey === "your-api-key-here" || 
-            firebaseConfig.projectId === "your-project-id") {
+        // 详细检查每个配置项
+        const isApiKeyValid = firebaseConfig.apiKey && firebaseConfig.apiKey !== "your-api-key-here";
+        const isProjectIdValid = firebaseConfig.projectId && firebaseConfig.projectId !== "your-project-id";
+        
+        console.log('配置验证结果:', {
+            apiKeyValid: isApiKeyValid,
+            projectIdValid: isProjectIdValid,
+            apiKeyLength: firebaseConfig.apiKey ? firebaseConfig.apiKey.length : 0,
+            projectIdLength: firebaseConfig.projectId ? firebaseConfig.projectId.length : 0
+        });
+        
+        if (!isApiKeyValid || !isProjectIdValid) {
             console.warn('❌ Firebase配置未更新，请配置您的Firebase项目信息');
+            console.warn('详细信息:', {
+                apiKey: firebaseConfig.apiKey,
+                projectId: firebaseConfig.projectId,
+                needsApiKey: !isApiKeyValid,
+                needsProjectId: !isProjectIdValid
+            });
             showFirebaseConfigWarning();
             return false;
         }
@@ -75,6 +93,16 @@ async function initializeFirebase() {
 }
 
 function showFirebaseConfigWarning() {
+    // 调试信息：追踪警告调用来源
+    console.error('🚨 showFirebaseConfigWarning被调用！');
+    console.error('调用堆栈:', new Error().stack);
+    console.error('当前Firebase状态:', {
+        auth: !!window.auth,
+        db: !!window.db,
+        authType: typeof window.auth,
+        dbType: typeof window.db
+    });
+    
     // 移除已存在的警告
     const existingWarning = document.getElementById('firebase-config-warning');
     if (existingWarning) {
@@ -162,5 +190,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    await initializeFirebase();
+    const firebaseInitialized = await initializeFirebase();
+    
+    // 发出Firebase初始化完成事件
+    const event = new CustomEvent('firebaseInitialized', { 
+        detail: { success: firebaseInitialized } 
+    });
+    document.dispatchEvent(event);
+    console.log('🎉 Firebase初始化事件已发出:', firebaseInitialized);
 });

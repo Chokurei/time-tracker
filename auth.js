@@ -265,5 +265,21 @@ class AuthManager {
     }
 }
 
-// 初始化认证管理器
-window.authManager = new AuthManager();
+// 监听Firebase初始化完成事件
+document.addEventListener('firebaseInitialized', (event) => {
+    console.log('🔄 收到Firebase初始化完成事件:', event.detail);
+    console.log('🔄 创建AuthManager实例...');
+    window.authManager = new AuthManager();
+    console.log('✅ AuthManager已创建');
+});
+
+// 备用方案：如果事件没有触发，使用DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+    // 等待一段时间，如果AuthManager还没有创建，则创建它
+    setTimeout(() => {
+        if (!window.authManager) {
+            console.log('⚠️ 使用备用方案创建AuthManager...');
+            window.authManager = new AuthManager();
+        }
+    }, 1000);
+});
