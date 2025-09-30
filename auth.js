@@ -10,6 +10,9 @@ class AuthManager {
         // 等待Firebase初始化
         await this.waitForFirebase();
         
+        // 检查Firebase配置状态
+        this.updateConfigStatus();
+        
         // 监听认证状态变化
         if (window.auth) {
             const { onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
@@ -232,6 +235,25 @@ class AuthManager {
 
     isGuest() {
         return this.isGuestMode;
+    }
+
+    updateConfigStatus() {
+        const statusElement = document.getElementById('config-status');
+        if (!statusElement) return;
+
+        if (window.auth && window.db) {
+            statusElement.innerHTML = `
+                <span style="color: #4caf50; font-size: 12px;">
+                    ✅ Firebase已配置 - 云端同步可用
+                </span>
+            `;
+        } else {
+            statusElement.innerHTML = `
+                <span style="color: #ff9800; font-size: 12px;">
+                    ⚠️ 本地模式 - <a href="#" onclick="document.getElementById('firebase-config-warning')?.remove(); window.showFirebaseConfigWarning?.(); return false;" style="color: #ff9800; text-decoration: underline;">配置Firebase启用云端同步</a>
+                </span>
+            `;
+        }
     }
 }
 

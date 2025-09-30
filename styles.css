@@ -180,6 +180,14 @@ body {
     transform: rotate(180deg);
 }
 
+.config-status {
+    margin-top: 5px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(5px);
+}
+
 .user-info {
     display: flex;
     align-items: center;
