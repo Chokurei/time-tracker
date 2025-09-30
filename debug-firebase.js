@@ -418,13 +418,12 @@ class FirebaseDebugger {
                 return;
             }
 
-            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             
             const recordsRef = collection(window.db, 'timeRecords');
             const q = query(
                 recordsRef,
-                where('userId', '==', typeof user === 'string' ? user : user.uid),
-                orderBy('startTime', 'desc')
+                where('userId', '==', typeof user === 'string' ? user : user.uid)
             );
 
             const querySnapshot = await getDocs(q);
@@ -440,6 +439,9 @@ class FirebaseDebugger {
                     startTime: data.startTime.toDate()
                 });
             });
+
+            // 客户端排序：按开始时间降序排列
+            records.sort((a, b) => b.startTime - a.startTime);
 
             console.log(`📊 用户 ${typeof user === 'string' ? user : user.uid} 的记录:`, records);
             return records;

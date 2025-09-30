@@ -82,7 +82,7 @@ class SyncManager {
                 return;
             }
 
-            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             
             console.log('🔄 开始从云端拉取最新数据...');
             
@@ -90,8 +90,7 @@ class SyncManager {
             const recordsRef = collection(window.db, 'timeRecords');
             const q = query(
                 recordsRef,
-                where('userId', '==', window.timeTracker.currentUser.uid),
-                orderBy('startTime', 'desc')
+                where('userId', '==', window.timeTracker.currentUser.uid)
             );
 
             const querySnapshot = await getDocs(q);
@@ -106,6 +105,9 @@ class SyncManager {
                     endTime: data.endTime.toDate()
                 });
             });
+
+            // 客户端排序：按开始时间降序排列
+            cloudRecords.sort((a, b) => b.startTime - a.startTime);
 
             console.log(`📥 从云端获取到 ${cloudRecords.length} 条记录`);
             console.log(`📱 本地当前有 ${window.timeTracker.records.length} 条记录`);
