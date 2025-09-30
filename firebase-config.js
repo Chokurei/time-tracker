@@ -22,8 +22,8 @@ async function initializeFirebase() {
         };
 
         // 检查配置是否已更新
-        if (firebaseConfig.apiKey === "AIzaSyDBfeHd48RAqmG68g5pqOIAxSpi8kp37Wo" || 
-            firebaseConfig.projectId === "time-tracker-9ac34") {
+        if (firebaseConfig.apiKey === "your-api-key-here" || 
+            firebaseConfig.projectId === "your-project-id") {
             console.warn('Firebase配置未更新，请配置您的Firebase项目信息');
             showFirebaseConfigWarning();
             return false;
