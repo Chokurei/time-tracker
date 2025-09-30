@@ -258,7 +258,156 @@ class FirebaseDebugger {
         resultsEl.innerHTML = html;
     }
 
-    // 测试特定用户的记录
+    // 检查用户的所有记录
+    async checkUserRecords() {
+        try {
+            this.clearResults();
+            this.addResult('检查记录', 'info', '开始检查用户记录...');
+
+            const authManager = window.authManager;
+            const isAuthenticated = authManager?.isAuthenticated();
+            const isGuest = authManager?.isGuest();
+
+            if (isGuest) {
+                // 检查本地记录
+                const localRecords = this.checkLocalRecords();
+                this.addResult('本地记录', 'success', `找到 ${localRecords.length} 条本地记录`, {
+                    records: localRecords.slice(0, 5).map(r => ({
+                        activity: r.activity,
+                        date: r.date,
+                        duration: this.formatDuration(r.duration)
+                    })),
+                    total: localRecords.length
+                });
+                return;
+            }
+
+            if (!isAuthenticated || !window.auth?.currentUser) {
+                this.addResult('检查记录', 'error', '用户未登录，无法检查云端记录');
+                return;
+            }
+
+            if (!window.db) {
+                this.addResult('检查记录', 'error', 'Firestore服务未初始化');
+                return;
+            }
+
+            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            
+            const user = window.auth.currentUser;
+            const recordsRef = collection(window.db, 'timeRecords');
+            const q = query(
+                recordsRef,
+                where('userId', '==', user.uid),
+                orderBy('startTime', 'desc')
+            );
+
+            console.log('🔍 正在查询用户记录...', { userId: user.uid });
+            const querySnapshot = await getDocs(q);
+            const records = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                records.push({
+                    id: doc.id,
+                    activity: data.activity,
+                    date: data.date,
+                    duration: data.duration,
+                    startTime: data.startTime.toDate(),
+                    endTime: data.endTime.toDate()
+                });
+            });
+
+            console.log(`📊 找到 ${records.length} 条云端记录:`, records);
+
+            if (records.length === 0) {
+                this.addResult('云端记录', 'warning', '未找到任何云端记录', {
+                    suggestion: '可能的原因：1) 之前的记录在其他账户下 2) 记录被意外删除 3) 权限问题导致无法读取'
+                });
+                
+                // 检查本地记录
+                const localRecords = this.checkLocalRecords();
+                if (localRecords.length > 0) {
+                    this.addResult('本地记录', 'info', `找到 ${localRecords.length} 条本地记录`, {
+                        suggestion: '这些记录可能需要重新同步到云端',
+                        records: localRecords.slice(0, 3).map(r => ({
+                            activity: r.activity,
+                            date: r.date,
+                            duration: this.formatDuration(r.duration)
+                        }))
+                    });
+                }
+            } else {
+                this.addResult('云端记录', 'success', `找到 ${records.length} 条云端记录`, {
+                    records: records.slice(0, 5).map(r => ({
+                        activity: r.activity,
+                        date: r.date,
+                        duration: this.formatDuration(r.duration),
+                        time: r.startTime.toLocaleString('zh-CN')
+                    })),
+                    total: records.length,
+                    dateRange: records.length > 0 ? {
+                        latest: records[0].startTime.toLocaleDateString('zh-CN'),
+                        earliest: records[records.length - 1].startTime.toLocaleDateString('zh-CN')
+                    } : null
+                });
+
+                // 触发应用重新加载记录
+                if (window.timeTracker && window.timeTracker.loadUserRecords) {
+                    console.log('🔄 触发应用重新加载记录...');
+                    await window.timeTracker.loadUserRecords();
+                    window.timeTracker.renderRecords();
+                    this.addResult('记录同步', 'success', '已触发应用重新加载记录');
+                }
+            }
+
+            this.displayResults();
+            
+        } catch (error) {
+            console.error('❌ 检查用户记录失败:', error);
+            this.addResult('检查记录', 'error', '检查记录失败', {
+                error: error.message,
+                code: error.code
+            });
+            this.displayResults();
+        }
+    }
+
+    // 检查本地记录
+    checkLocalRecords() {
+        try {
+            const user = window.authManager?.getCurrentUser();
+            const key = user ? `timeTrackerRecords_${user.uid}` : 'timeTrackerRecords';
+            const saved = localStorage.getItem(key);
+            const records = saved ? JSON.parse(saved) : [];
+            
+            return records.map(record => ({
+                ...record,
+                startTime: new Date(record.startTime),
+                endTime: new Date(record.endTime)
+            }));
+        } catch (e) {
+            console.error('检查本地记录失败:', e);
+            return [];
+        }
+    }
+
+    // 格式化时长
+    formatDuration(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        
+        if (hours > 0) {
+            return `${hours}小时${minutes % 60}分钟`;
+        } else if (minutes > 0) {
+            return `${minutes}分钟${seconds % 60}秒`;
+        } else {
+            return `${seconds}秒`;
+        }
+    }
+
+    // 测试特定用户的记录（保留原有功能）
     async testUserRecords(userId = null) {
         try {
             const user = userId || window.auth?.currentUser;
@@ -391,7 +540,7 @@ function addDebugInterface() {
             <h4 style="margin: 0 0 10px 0; color: #007bff;">🔧 Firebase调试工具</h4>
             <div style="margin-bottom: 10px;">
                 <button onclick="window.firebaseDebugger.runAllTests()" style="background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin: 2px; font-size: 12px;">运行测试</button>
-                <button onclick="window.firebaseDebugger.testUserRecords()" style="background: #28a745; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin: 2px; font-size: 12px;">检查记录</button>
+                <button onclick="window.firebaseDebugger.checkUserRecords()" style="background: #28a745; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin: 2px; font-size: 12px;">检查记录</button>
                 <button onclick="window.firebaseDebugger.showPermissionHelp()" style="background: #ffc107; color: black; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin: 2px; font-size: 12px;">权限帮助</button>
                 <button onclick="document.getElementById('debug-panel').style.display='none'" style="background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin: 2px; font-size: 12px;">关闭</button>
             </div>
