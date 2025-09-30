@@ -26,10 +26,15 @@ class AuthManager {
 
     async waitForFirebase() {
         let attempts = 0;
-        while (!window.auth && attempts < 50) {
+        while ((!window.auth || !window.db) && attempts < 50) {
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
         }
+        console.log('🔄 Firebase等待完成:', {
+            auth: !!window.auth,
+            db: !!window.db,
+            attempts: attempts
+        });
     }
 
     setupEventListeners() {

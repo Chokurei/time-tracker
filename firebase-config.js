@@ -22,12 +22,18 @@ async function initializeFirebase() {
         };
 
         // 检查配置是否已更新
+        console.log('🔍 检查Firebase配置...');
+        console.log('API Key:', firebaseConfig.apiKey);
+        console.log('Project ID:', firebaseConfig.projectId);
+        
         if (firebaseConfig.apiKey === "your-api-key-here" || 
             firebaseConfig.projectId === "your-project-id") {
-            console.warn('Firebase配置未更新，请配置您的Firebase项目信息');
+            console.warn('❌ Firebase配置未更新，请配置您的Firebase项目信息');
             showFirebaseConfigWarning();
             return false;
         }
+
+        console.log('✅ Firebase配置检查通过');
 
         // 调试信息：显示当前配置
         console.log('🔧 Firebase配置信息:', {
@@ -38,6 +44,7 @@ async function initializeFirebase() {
         });
 
         // 初始化Firebase（检查是否已经初始化）
+        console.log('🚀 开始Firebase应用初始化...');
         let app;
         try {
             app = getApp(); // 尝试获取已存在的应用
@@ -45,15 +52,20 @@ async function initializeFirebase() {
         } catch (error) {
             // 如果应用不存在，则初始化新应用
             console.log('🚀 初始化新的Firebase应用');
+            console.log('配置对象:', firebaseConfig);
             app = initializeApp(firebaseConfig);
+            console.log('✅ Firebase应用初始化完成');
         }
         
+        console.log('🔐 初始化Auth服务...');
         window.auth = getAuth(app);
+        console.log('🗄️ 初始化Firestore服务...');
         window.db = getFirestore(app);
 
         console.log('✅ Firebase初始化成功');
         console.log('🔐 Auth对象:', window.auth ? '已创建' : '创建失败');
         console.log('🗄️ Firestore对象:', window.db ? '已创建' : '创建失败');
+        console.log('🎉 所有Firebase服务已准备就绪');
         return true;
     } catch (error) {
         console.error('Firebase初始化失败:', error);
