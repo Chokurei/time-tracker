@@ -6,6 +6,17 @@ on:
   pull_request:
     branches: [ main ]
 
+# 权限设置
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 并发设置
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -25,14 +36,3 @@ jobs:
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v4
-
-# 权限设置
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# 并发设置
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
