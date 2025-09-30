@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时间记录器 - 高效时间管理工具</title>
+    <meta name="description" content="一个简洁美观的交互式时间记录器，帮助你记录和分析时间分配情况，提高工作效率和时间管理能力。">
+    <meta name="keywords" content="时间记录器,时间管理,效率工具,计时器,时间统计,工作记录">
+    <meta name="author" content="Time Tracker">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="时间记录器 - 高效时间管理工具">
+    <meta property="og:description" content="一个简洁美观的交互式时间记录器，帮助你记录和分析时间分配情况。">
+    <meta property="og:url" content="">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="时间记录器 - 高效时间管理工具">
+    <meta property="twitter:description" content="一个简洁美观的交互式时间记录器，帮助你记录和分析时间分配情况。">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏰</text></svg>">
+    
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head> 
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-clock"></i> 时间记录器</h1>
+            <p class="subtitle">记录和分析你的时间分配</p>
+        </header>
+
+        <main class="main-content">
+            <!-- 计时器区域 -->
+            <section class="timer-section">
+                <div class="timer-display">
+                    <div class="current-time" id="currentTime">00:00:00</div>
+                    <div class="current-activity" id="currentActivity">未开始记录</div>
+                </div>
+                
+                <div class="activity-selector">
+                    <label for="activityType">选择活动类型：</label>
+                    <select id="activityType">
+                        <option value="work">工作</option>
+                        <option value="study">学习</option>
+                        <option value="exercise">运动</option>
+                        <option value="rest">休息</option>
+                        <option value="entertainment">娱乐</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <input type="text" id="customActivity" placeholder="自定义活动名称" style="display: none;">
+                </div>
+
+                <div class="timer-controls">
+                    <button id="startBtn" class="btn btn-primary">
+                        <i class="fas fa-play"></i> 开始
+                    </button>
+                    <button id="pauseBtn" class="btn btn-secondary" disabled>
+                        <i class="fas fa-pause"></i> 暂停
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <i class="fas fa-stop"></i> 停止
+                    </button>
+                </div>
+            </section>
+
+            <!-- 今日统计 -->
+            <section class="stats-section">
+                <h2>今日统计</h2>
+                <div class="stats-grid" id="todayStats">
+                    <!-- 统计数据将通过JavaScript动态生成 -->
+                </div>
+            </section>
+
+            <!-- 日历视图 -->
+            <section class="calendar-section">
+                <h2>日历视图</h2>
+                <div class="calendar-controls">
+                    <button id="prevMonth" class="btn btn-outline">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span id="currentMonth"></span>
+                    <button id="nextMonth" class="btn btn-outline">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="calendar-grid" id="calendar">
+                    <!-- 日历将通过JavaScript动态生成 -->
+                </div>
+            </section>
+
+            <!-- 活动记录 -->
+            <section class="records-section">
+                <h2>最近记录</h2>
+                <div class="records-list" id="recordsList">
+                    <!-- 记录列表将通过JavaScript动态生成 -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
