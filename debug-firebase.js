@@ -292,14 +292,13 @@ class FirebaseDebugger {
                 return;
             }
 
-            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             
             const user = window.auth.currentUser;
             const recordsRef = collection(window.db, 'timeRecords');
             const q = query(
                 recordsRef,
-                where('userId', '==', user.uid),
-                orderBy('startTime', 'desc')
+                where('userId', '==', user.uid)
             );
 
             console.log('🔍 正在查询用户记录...', { userId: user.uid });
@@ -317,6 +316,9 @@ class FirebaseDebugger {
                     endTime: data.endTime.toDate()
                 });
             });
+
+            // 客户端排序：按开始时间降序排列
+            records.sort((a, b) => b.startTime - a.startTime);
 
             console.log(`📊 找到 ${records.length} 条云端记录:`, records);
 

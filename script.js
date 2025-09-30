@@ -292,13 +292,12 @@ class TimeTracker {
                 return;
             }
 
-            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { collection, query, where, getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             
             const recordsRef = collection(window.db, 'timeRecords');
             const q = query(
                 recordsRef, 
-                where('userId', '==', this.currentUser.uid),
-                orderBy('startTime', 'desc')
+                where('userId', '==', this.currentUser.uid)
             );
             
             console.log('正在从云端加载用户记录...');
@@ -313,6 +312,9 @@ class TimeTracker {
                     endTime: data.endTime.toDate()
                 });
             });
+
+            // 客户端排序：按开始时间降序排列
+            this.records.sort((a, b) => b.startTime - a.startTime);
 
             console.log(`✅ 从云端加载了 ${this.records.length} 条记录`);
             this.isOffline = false;
