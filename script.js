@@ -24,14 +24,23 @@ class TimeTracker {
     // 为用户初始化数据
     async initializeForUser(user) {
         this.currentUser = user;
-        this.records = [];
         
         if (user) {
-            await this.loadUserRecords();
+            // 先尝试加载用户记录，如果失败则使用空数组
+            try {
+                await this.loadUserRecords();
+            } catch (error) {
+                console.error('加载用户记录失败:', error);
+                this.records = [];
+            }
+            
             this.updateDisplay();
             this.renderCalendar();
             this.renderTodayStats();
             this.renderRecords();
+        } else {
+            // 用户登出时清空记录
+            this.records = [];
         }
     }
 
@@ -260,18 +269,26 @@ class TimeTracker {
 
     // 加载用户记录
     async loadUserRecords() {
-        if (!this.currentUser) return;
+        if (!this.currentUser) {
+            this.records = [];
+            return;
+        }
+
+        // 初始化records数组
+        this.records = [];
 
         try {
             if (window.authManager && window.authManager.isGuest()) {
                 // 游客模式使用本地存储
                 this.records = this.loadLocalRecords();
+                console.log(`游客模式加载了 ${this.records.length} 条本地记录`);
                 return;
             }
 
             if (!window.db) {
                 console.warn('Firestore未初始化，使用本地存储');
                 this.records = this.loadLocalRecords();
+                console.log(`离线模式加载了 ${this.records.length} 条本地记录`);
                 return;
             }
 
@@ -284,8 +301,8 @@ class TimeTracker {
                 orderBy('startTime', 'desc')
             );
             
+            console.log('正在从云端加载用户记录...');
             const querySnapshot = await getDocs(q);
-            this.records = [];
             
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
@@ -297,13 +314,20 @@ class TimeTracker {
                 });
             });
 
-            console.log(`加载了 ${this.records.length} 条记录`);
+            console.log(`✅ 从云端加载了 ${this.records.length} 条记录`);
             this.isOffline = false;
             
+            // 同时保存到本地作为备份
+            this.saveLocalRecords();
+            
         } catch (error) {
-            console.error('加载云端记录失败:', error);
+            console.error('❌ 加载云端记录失败:', error);
             this.isOffline = true;
-            this.records = this.loadLocalRecords();
+            
+            // 尝试从本地存储加载
+            const localRecords = this.loadLocalRecords();
+            this.records = localRecords;
+            console.log(`⚠️ 使用本地备份，加载了 ${this.records.length} 条记录`);
         }
     }
 

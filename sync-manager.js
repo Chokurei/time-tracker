@@ -77,27 +77,29 @@ class SyncManager {
         if (!window.timeTracker || !window.timeTracker.currentUser) return;
 
         try {
-            const lastLocalRecord = window.timeTracker.records[0];
-            const lastLocalTime = lastLocalRecord ? lastLocalRecord.startTime : new Date(0);
+            if (!window.db) {
+                console.warn('Firestore未初始化，跳过云端同步');
+                return;
+            }
 
-            if (!window.db) return;
-
-            const { collection, query, where, getDocs, orderBy, Timestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             
+            console.log('🔄 开始从云端拉取最新数据...');
+            
+            // 获取所有用户记录，而不是增量更新
             const recordsRef = collection(window.db, 'timeRecords');
             const q = query(
                 recordsRef,
                 where('userId', '==', window.timeTracker.currentUser.uid),
-                where('startTime', '>', Timestamp.fromDate(lastLocalTime)),
                 orderBy('startTime', 'desc')
             );
 
             const querySnapshot = await getDocs(q);
-            const newRecords = [];
+            const cloudRecords = [];
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                newRecords.push({
+                cloudRecords.push({
                     ...data,
                     id: doc.id,
                     startTime: data.startTime.toDate(),
@@ -105,9 +107,14 @@ class SyncManager {
                 });
             });
 
-            if (newRecords.length > 0) {
-                // 合并新记录到本地
-                window.timeTracker.records = [...newRecords, ...window.timeTracker.records];
+            console.log(`📥 从云端获取到 ${cloudRecords.length} 条记录`);
+            console.log(`📱 本地当前有 ${window.timeTracker.records.length} 条记录`);
+
+            // 合并云端和本地数据，去重
+            const mergedRecords = this.mergeRecords(window.timeTracker.records, cloudRecords);
+            
+            if (mergedRecords.length !== window.timeTracker.records.length) {
+                window.timeTracker.records = mergedRecords;
                 window.timeTracker.saveLocalRecords();
                 
                 // 更新显示
@@ -115,12 +122,45 @@ class SyncManager {
                 window.timeTracker.renderRecords();
                 window.timeTracker.renderCalendar();
                 
-                console.log(`同步了 ${newRecords.length} 条新记录`);
+                console.log(`✅ 同步完成，现在共有 ${mergedRecords.length} 条记录`);
+            } else {
+                console.log('📊 数据已是最新，无需更新');
             }
 
         } catch (error) {
-            console.error('拉取最新数据失败:', error);
+            console.error('❌ 拉取最新数据失败:', error);
         }
+    }
+
+    // 合并记录并去重
+    mergeRecords(localRecords, cloudRecords) {
+        const recordMap = new Map();
+        
+        // 先添加云端记录（优先级更高）
+        cloudRecords.forEach(record => {
+            if (record.id) {
+                recordMap.set(record.id, record);
+            } else {
+                // 对于没有ID的记录，使用时间戳作为键
+                const key = `${record.startTime.getTime()}_${record.endTime.getTime()}_${record.activity}`;
+                recordMap.set(key, record);
+            }
+        });
+        
+        // 再添加本地记录（如果不存在的话）
+        localRecords.forEach(record => {
+            if (record.id && !recordMap.has(record.id)) {
+                recordMap.set(record.id, record);
+            } else if (!record.id) {
+                const key = `${record.startTime.getTime()}_${record.endTime.getTime()}_${record.activity}`;
+                if (!recordMap.has(key)) {
+                    recordMap.set(key, record);
+                }
+            }
+        });
+        
+        // 转换为数组并按时间排序
+        return Array.from(recordMap.values()).sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
     }
 
     updateSyncStatus(message) {
