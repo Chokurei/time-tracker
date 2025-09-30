@@ -13,12 +13,12 @@ async function initializeFirebase() {
         // 3. 点击"项目设置" > "常规" > "您的应用" > "网络应用"
         // 4. 复制配置对象并替换下面的值
         const firebaseConfig = {
-            apiKey: "AIzaSyDBfeHd48RAqmG68g5pqOIAxSpi8kp37Wo",                    // 从Firebase控制台获取
-            authDomain: "time-tracker-9ac34.firebaseapp.com",     // 格式：项目ID.firebaseapp.com
-            projectId: "time-tracker-9ac34",                   // 您的Firebase项目ID
-            storageBucket: "time-tracker-9ac34.appspot.com",      // 格式：项目ID.appspot.com
-            messagingSenderId: "1065078932153",                 // 数字ID
-            appId: "1:1065078932153:web:0107c591416f57333c9168"                           // 应用ID，格式：1:数字:web:字符串
+            apiKey: "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abcdef1234567890abcdef"
         };
 
         // 检查配置是否已更新
@@ -29,8 +29,12 @@ async function initializeFirebase() {
         console.log('Storage Bucket:', firebaseConfig.storageBucket);
         
         // 详细检查每个配置项
-        const isApiKeyValid = firebaseConfig.apiKey && firebaseConfig.apiKey !== "your-api-key-here";
-        const isProjectIdValid = firebaseConfig.projectId && firebaseConfig.projectId !== "your-project-id";
+        const isApiKeyValid = firebaseConfig.apiKey && 
+                             firebaseConfig.apiKey !== "your-api-key-here" && 
+                             firebaseConfig.apiKey !== "AIzaSyC8QQvKqJZQQQvKqJZQQQvKqJZQQQvKqJZ" &&
+                             !firebaseConfig.apiKey.includes("QQvKqJZ");
+        const isProjectIdValid = firebaseConfig.projectId && 
+                                firebaseConfig.projectId !== "your-project-id";
         
         console.log('配置验证结果:', {
             apiKeyValid: isApiKeyValid,
@@ -139,10 +143,18 @@ function showFirebaseConfigWarning() {
             <ol style="margin: 10px 0; padding-left: 20px;">
                 <li>访问 <a href="https://console.firebase.google.com/" target="_blank" style="color: #fff; text-decoration: underline;">Firebase控制台</a></li>
                 <li>创建新项目或选择现有项目</li>
-                <li>启用Authentication和Firestore数据库</li>
-                <li>在项目设置中获取Web应用配置</li>
-                <li>将配置信息替换到firebase-config.js文件中</li>
+                <li>启用Authentication（电子邮件/密码）和Firestore数据库</li>
+                <li>在项目设置 → 常规 → 您的应用 → Web应用中获取配置</li>
+                <li>复制配置对象中的所有值</li>
+                <li>将这些值替换到 <code>firebase-config.js</code> 文件中的对应位置</li>
+                <li><strong>重要：</strong>确保API密钥有效且项目ID正确匹配</li>
             </ol>
+            <p style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; font-size: 12px;">
+                <strong>提示：</strong>如果遇到"API key not valid"错误，请检查：<br>
+                • API密钥是否从正确的Firebase项目复制<br>
+                • 项目是否启用了Web应用<br>
+                • API密钥是否有适当的权限限制
+            </p>
         </div>
         <div style="display: flex; gap: 10px; justify-content: flex-end;">
             <button onclick="window.open('https://console.firebase.google.com/', '_blank')" style="
