@@ -188,9 +188,25 @@ class AuthManager {
             userEmail.textContent = this.currentUser.email || '游客模式';
         }
         
-        // 初始化时间记录器
+        // 初始化时间记录器 - 确保TimeTracker实例存在
+        this.initializeTimeTracker();
+    }
+
+    async initializeTimeTracker() {
+        // 等待TimeTracker实例创建
+        let attempts = 0;
+        const maxAttempts = 50; // 最多等待5秒
+        
+        while (!window.timeTracker && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
         if (window.timeTracker) {
+            console.log('🔄 初始化TimeTracker用户:', this.currentUser?.email || '游客模式');
             window.timeTracker.initializeForUser(this.currentUser);
+        } else {
+            console.error('❌ TimeTracker实例未找到');
         }
     }
 
