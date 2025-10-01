@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据恢复工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        
+        .record-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #007bff;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 数据恢复工具</h1>
+        
+        <div id="status"></div>
+        
+        <div style="margin: 20px 0;">
+            <button onclick="checkData()">检查数据状态</button>
+            <button onclick="refreshAuth()">刷新登录状态</button>
+            <button onclick="syncToCloud()" id="syncBtn" disabled>同步到云端</button>
+            <button onclick="loadFromCloud()">从云端加载</button>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+            <h4>🔧 备用方案：手动同步</h4>
+            <p>如果自动检测登录状态失败，您可以手动输入用户信息：</p>
+            <div style="margin: 10px 0;">
+                <label>用户邮箱：</label>
+                <input type="email" id="manualEmail" placeholder="输入您的登录邮箱" style="margin-left: 10px; padding: 5px;">
+            </div>
+            <div style="margin: 10px 0;">
+                <label>用户ID：</label>
+                <input type="text" id="manualUid" placeholder="输入用户ID（可选）" style="margin-left: 10px; padding: 5px;">
+            </div>
+            <button onclick="manualSync()" style="background: #28a745;">手动同步到云端</button>
+        </div>
+        
+        <div id="progress" style="display: none;">
+            <div class="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div id="progressText">准备中...</div>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, query, where, getDocs, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase配置 - 与主应用保持一致
+        const firebaseConfig = {
+            apiKey: "AIzaSyCeJfslWN-w3TvkNOUIM2lEPHQo0ypfzus",
+            authDomain: "tracker-dc404.firebaseapp.com",
+            projectId: "tracker-dc404",
+            storageBucket: "tracker-dc404.firebasestorage.app",
+            messagingSenderId: "418770106707",
+            appId: "1:418770106707:web:b2ade92870555f6d3c09a6",
+            measurementId: "G-L424BY5NJF"
+        };
+
+        // 初始化Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        window.auth = auth;
+        window.db = db;
+        
+        let currentUser = null;
+        
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            updateStatus();
+        });
+        
+        // 检查是否有其他窗口的登录状态
+        function checkCrossWindowAuth() {
+            // 尝试从localStorage获取登录状态
+            const authData = localStorage.getItem('firebase:authUser:AIzaSyBqJGIGnLvwNGqtgCOmQHgCqOaKJOaKJOa:[DEFAULT]');
+            if (authData && !currentUser) {
+                // 强制刷新认证状态
+                auth.currentUser && updateStatus();
+            }
+        }
+        
+        // 定期检查登录状态
+        setInterval(checkCrossWindowAuth, 2000);
+        
+        function updateStatus() {
+            const statusDiv = document.getElementById('status');
+            if (currentUser) {
+                statusDiv.innerHTML = `<div class="success">✅ 已登录用户: ${currentUser.email}</div>`;
+                document.getElementById('syncBtn').disabled = false;
+            } else {
+                statusDiv.innerHTML = `<div class="warning">⚠️ 请先登录主应用，然后点击"刷新登录状态"</div>`;
+                document.getElementById('syncBtn').disabled = true;
+            }
+        }
+        
+        window.refreshAuth = async function() {
+            try {
+                // 方法1: 检查localStorage中的Firebase认证数据
+                const authKeys = Object.keys(localStorage).filter(key => 
+                    key.includes('firebase:authUser') || key.includes('firebase:auth')
+                );
+                
+                if (authKeys.length > 0) {
+                    console.log('找到Firebase认证数据:', authKeys);
+                    
+                    // 尝试解析用户信息
+                    for (const key of authKeys) {
+                        try {
+                            const authData = JSON.parse(localStorage.getItem(key));
+                            if (authData && authData.uid && authData.email) {
+                                // 模拟用户对象
+                                currentUser = {
+                                    uid: authData.uid,
+                                    email: authData.email,
+                                    displayName: authData.displayName
+                                };
+                                updateStatus();
+                                document.getElementById('status').innerHTML += '<div class="success">✅ 从本地存储检测到登录状态</div>';
+                                return;
+                            }
+                        } catch (e) {
+                            console.log('解析认证数据失败:', e);
+                        }
+                    }
+                }
+                
+                // 方法2: 强制重新加载Firebase用户状态
+                await auth.currentUser?.reload();
+                currentUser = auth.currentUser;
+                
+                // 方法3: 等待认证状态变化
+                if (!currentUser) {
+                    await new Promise((resolve) => {
+                        const unsubscribe = onAuthStateChanged(auth, (user) => {
+                            if (user) {
+                                currentUser = user;
+                                unsubscribe();
+                                resolve();
+                            } else {
+                                setTimeout(() => {
+                                    unsubscribe();
+                                    resolve();
+                                }, 3000);
+                            }
+                        });
+                    });
+                }
+                
+                updateStatus();
+                
+                if (currentUser) {
+                    document.getElementById('status').innerHTML += '<div class="success">✅ 登录状态已刷新</div>';
+                } else {
+                    document.getElementById('status').innerHTML += '<div class="error">❌ 仍未检测到登录状态。请尝试：<br>1. 刷新主应用页面并重新登录<br>2. 清除浏览器缓存后重新登录</div>';
+                }
+            } catch (error) {
+                document.getElementById('status').innerHTML += `<div class="error">❌ 刷新失败: ${error.message}</div>`;
+            }
+        };
+        
+        window.checkData = async function() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            
+            // 检查本地数据
+            const localRecords = getLocalRecords();
+            
+            if (localRecords.length === 0) {
+                resultsDiv.innerHTML = '<div class="info">未找到本地记录</div>';
+                return;
+            }
+            
+            resultsDiv.innerHTML = `<div class="success">找到 ${localRecords.length} 条本地记录</div>`;
+            
+            // 显示前几条记录
+            const preview = localRecords.slice(0, 3).map(record => `
+                <div class="record-item">
+                    <strong>${record.activity}</strong> - ${record.date}<br>
+                    时长: ${formatDuration(record.duration)}
+                </div>
+            `).join('');
+            
+            resultsDiv.innerHTML += `<h3>记录预览:</h3>${preview}`;
+            
+            if (currentUser) {
+                // 检查云端数据
+                try {
+                    const cloudRecords = await getCloudRecords();
+                    resultsDiv.innerHTML += `<div class="info">云端记录: ${cloudRecords.length} 条</div>`;
+                } catch (error) {
+                    resultsDiv.innerHTML += `<div class="error">检查云端记录失败: ${error.message}</div>`;
+                }
+            }
+        };
+        
+        window.manualSync = async function() {
+            const email = document.getElementById('manualEmail').value.trim();
+            const uid = document.getElementById('manualUid').value.trim();
+            
+            if (!email) {
+                alert('请输入您的登录邮箱');
+                return;
+            }
+            
+            // 创建临时用户对象
+            const tempUser = {
+                uid: uid || email.replace(/[@.]/g, '_'), // 如果没有UID，用邮箱生成一个
+                email: email
+            };
+            
+            await performSync(tempUser);
+        };
+        
+        window.syncToCloud = async function() {
+            if (!currentUser) {
+                alert('请先登录或使用手动同步');
+                return;
+            }
+            
+            await performSync(currentUser);
+        };
+        
+        async function performSync(user) {
+            const localRecords = getLocalRecords();
+            if (localRecords.length === 0) {
+                alert('没有本地记录需要同步');
+                return;
+            }
+            
+            const progressDiv = document.getElementById('progress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const resultsDiv = document.getElementById('results');
+            
+            progressDiv.style.display = 'block';
+            document.getElementById('syncBtn').disabled = true;
+            
+            let synced = 0;
+            let failed = 0;
+            
+            resultsDiv.innerHTML = `<div class="info">开始同步到用户: ${user.email}</div>`;
+            
+            for (let i = 0; i < localRecords.length; i++) {
+                const record = localRecords[i];
+                const progress = ((i + 1) / localRecords.length) * 100;
+                
+                progressBar.style.width = progress + '%';
+                progressText.textContent = `正在同步 ${i + 1}/${localRecords.length}: ${record.activity}`;
+                
+                try {
+                    console.log('正在同步记录:', record);
+                    
+                    // 修复时间格式问题
+                    let startTime, endTime;
+                    
+                    // 处理startTime
+                    if (typeof record.startTime === 'number') {
+                        startTime = new Date(record.startTime);
+                    } else if (typeof record.startTime === 'string') {
+                        startTime = new Date(record.startTime);
+                    } else {
+                        startTime = new Date();
+                    }
+                    
+                    // 处理endTime
+                    if (record.endTime) {
+                        if (typeof record.endTime === 'number') {
+                            endTime = new Date(record.endTime);
+                        } else if (typeof record.endTime === 'string') {
+                            endTime = new Date(record.endTime);
+                        } else {
+                            endTime = new Date(startTime.getTime() + (record.duration || 0));
+                        }
+                    } else {
+                        // 如果没有endTime，根据startTime和duration计算
+                        endTime = new Date(startTime.getTime() + (record.duration || 0));
+                    }
+                    
+                    // 验证日期是否有效
+                    if (isNaN(startTime.getTime())) {
+                        console.warn('无效的startTime，使用当前时间:', record.startTime);
+                        startTime = new Date();
+                    }
+                    
+                    if (isNaN(endTime.getTime())) {
+                        console.warn('无效的endTime，根据startTime和duration重新计算:', record.endTime);
+                        endTime = new Date(startTime.getTime() + (record.duration || 0));
+                    }
+                    
+                    const docData = {
+                        userId: user.uid,
+                        activity: record.activity,
+                        type: record.type || 'work',
+                        startTime: startTime,
+                        endTime: endTime,
+                        duration: record.duration || 0,
+                        date: record.date || startTime.toDateString(),
+                        createdAt: new Date(),
+                        source: 'data-recovery-tool'
+                    };
+                    
+                    console.log('修复后的文档数据:', docData);
+                    console.log('时间验证:', {
+                        startTimeValid: !isNaN(startTime.getTime()),
+                        endTimeValid: !isNaN(endTime.getTime()),
+                        startTimeISO: startTime.toISOString(),
+                        endTimeISO: endTime.toISOString()
+                    });
+                    
+                    const docRef = await addDoc(collection(db, 'timeRecords'), docData);
+                    console.log('同步成功，文档ID:', docRef.id);
+                    synced++;
+                } catch (error) {
+                    console.error('同步记录失败:', {
+                        record: record,
+                        error: error,
+                        errorCode: error.code,
+                        errorMessage: error.message,
+                        errorStack: error.stack
+                    });
+                    
+                    // 显示具体错误信息
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error';
+                    errorDiv.style.fontSize = '12px';
+                    errorDiv.style.marginTop = '5px';
+                    errorDiv.innerHTML = `记录 "${record.activity}" 失败: ${error.message}`;
+                    document.getElementById('results').appendChild(errorDiv);
+                    
+                    failed++;
+                }
+                
+                // 添加小延迟避免过快请求
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            progressDiv.style.display = 'none';
+            document.getElementById('syncBtn').disabled = false;
+            
+            resultsDiv.innerHTML = `
+                <div class="success">✅ 同步完成: ${synced} 条成功</div>
+                ${failed > 0 ? `<div class="error">❌ 失败: ${failed} 条</div>` : ''}
+                <div class="info">数据已同步到用户: ${user.email} (${user.uid})</div>
+            `;
+        }
+        
+        window.loadFromCloud = async function() {
+            if (!currentUser) {
+                alert('请先登录');
+                return;
+            }
+            
+            try {
+                const cloudRecords = await getCloudRecords();
+                const resultsDiv = document.getElementById('results');
+                
+                if (cloudRecords.length === 0) {
+                    resultsDiv.innerHTML = '<div class="info">云端没有记录</div>';
+                    return;
+                }
+                
+                // 保存到本地
+                localStorage.setItem('timeTrackerRecords', JSON.stringify(cloudRecords));
+                
+                resultsDiv.innerHTML = `<div class="success">✅ 从云端加载了 ${cloudRecords.length} 条记录到本地</div>`;
+                
+                // 刷新主应用
+                if (window.opener && window.opener.timeTracker) {
+                    window.opener.timeTracker.loadUserRecords();
+                    window.opener.timeTracker.renderRecords();
+                }
+                
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<div class="error">❌ 加载失败: ${error.message}</div>`;
+            }
+        };
+        
+        function getLocalRecords() {
+            const keys = ['timeTrackerRecords'];
+            if (currentUser) {
+                keys.push(`timeTrackerRecords_${currentUser.uid}`);
+            }
+            
+            let allRecords = [];
+            for (const key of keys) {
+                const saved = localStorage.getItem(key);
+                if (saved) {
+                    try {
+                        const records = JSON.parse(saved);
+                        if (Array.isArray(records)) {
+                            allRecords.push(...records);
+                        }
+                    } catch (e) {
+                        console.error('解析本地记录失败:', e);
+                    }
+                }
+            }
+            
+            return allRecords;
+        }
+        
+        async function getCloudRecords() {
+            const q = query(
+                collection(db, 'timeRecords'),
+                where('userId', '==', currentUser.uid)
+            );
+            
+            const querySnapshot = await getDocs(q);
+            const records = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                records.push({
+                    id: doc.id,
+                    activity: data.activity,
+                    type: data.type,
+                    startTime: data.startTime.toDate(),
+                    endTime: data.endTime.toDate(),
+                    duration: data.duration,
+                    date: data.date
+                });
+            });
+            
+            return records;
+        }
+        
+        function formatDuration(ms) {
+            const hours = Math.floor(ms / 3600000);
+            const minutes = Math.floor((ms % 3600000) / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            
+            if (hours > 0) {
+                return `${hours}小时${minutes}分钟`;
+            } else if (minutes > 0) {
+                return `${minutes}分钟${seconds}秒`;
+            } else {
+                return `${seconds}秒`;
+            }
+        }
+        
+        // 页面加载时检查数据
+        window.onload = function() {
+            setTimeout(checkData, 1000);
+        };
+    </script>
+</body>
+</html>

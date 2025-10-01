@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地存储检查工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .storage-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .key {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .value {
+            margin-top: 5px;
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .summary {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 本地存储检查工具</h1>
+        
+        <div id="summary" class="summary"></div>
+        
+        <button onclick="checkStorage()">检查本地存储</button>
+        <button onclick="clearTimeTrackerData()">清除时间记录数据</button>
+        <button onclick="exportData()">导出数据</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function checkStorage() {
+            const results = document.getElementById('results');
+            const summary = document.getElementById('summary');
+            results.innerHTML = '';
+            
+            let timeTrackerKeys = [];
+            let totalRecords = 0;
+            
+            // 检查所有localStorage项目
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('timeTracker')) {
+                    timeTrackerKeys.push(key);
+                    
+                    const value = localStorage.getItem(key);
+                    const div = document.createElement('div');
+                    div.className = 'storage-item';
+                    
+                    let displayValue = value;
+                    let recordCount = 0;
+                    
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (Array.isArray(parsed)) {
+                            recordCount = parsed.length;
+                            totalRecords += recordCount;
+                            displayValue = JSON.stringify(parsed, null, 2);
+                        }
+                    } catch (e) {
+                        // 不是JSON，保持原样
+                    }
+                    
+                    div.innerHTML = `
+                        <div class="key">${key} ${recordCount > 0 ? `(${recordCount} 条记录)` : ''}</div>
+                        <div class="value">${displayValue}</div>
+                    `;
+                    results.appendChild(div);
+                }
+            }
+            
+            // 显示摘要
+            if (timeTrackerKeys.length === 0) {
+                summary.innerHTML = '❌ 未找到任何时间记录数据';
+                summary.style.background = '#f8d7da';
+                summary.style.borderColor = '#f5c6cb';
+                summary.style.color = '#721c24';
+            } else {
+                summary.innerHTML = `✅ 找到 ${timeTrackerKeys.length} 个存储项，共 ${totalRecords} 条记录`;
+            }
+            
+            if (timeTrackerKeys.length === 0) {
+                results.innerHTML = '<p>未找到任何时间记录相关的本地存储数据。</p>';
+            }
+        }
+        
+        function clearTimeTrackerData() {
+            if (confirm('确定要清除所有时间记录数据吗？此操作不可撤销！')) {
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.includes('timeTracker')) {
+                        keys.push(key);
+                    }
+                }
+                
+                keys.forEach(key => localStorage.removeItem(key));
+                alert(`已清除 ${keys.length} 个存储项`);
+                checkStorage();
+            }
+        }
+        
+        function exportData() {
+            const data = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('timeTracker')) {
+                    data[key] = localStorage.getItem(key);
+                }
+            }
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `timetracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // 页面加载时自动检查
+        window.onload = checkStorage;
+    </script>
+</body>
+</html>

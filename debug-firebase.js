@@ -264,13 +264,9 @@ class FirebaseDebugger {
             this.clearResults();
             this.addResult('检查记录', 'info', '开始检查用户记录...');
 
-            const authManager = window.authManager;
-            const isAuthenticated = authManager?.isAuthenticated();
-            const isGuest = authManager?.isGuest();
-
-            if (isGuest) {
-                // 检查本地记录
-                const localRecords = this.checkLocalRecords();
+            // 先检查本地记录
+            const localRecords = this.checkLocalRecords();
+            if (localRecords.length > 0) {
                 this.addResult('本地记录', 'success', `找到 ${localRecords.length} 条本地记录`, {
                     records: localRecords.slice(0, 5).map(r => ({
                         activity: r.activity,
@@ -279,11 +275,24 @@ class FirebaseDebugger {
                     })),
                     total: localRecords.length
                 });
+            } else {
+                this.addResult('本地记录', 'info', '未找到本地记录');
+            }
+
+            // 检查认证状态
+            const authManager = window.authManager;
+            const isAuthenticated = authManager?.isAuthenticated();
+            const isGuest = authManager?.isGuest();
+
+            if (isGuest) {
+                this.addResult('用户状态', 'info', '当前为访客模式，仅显示本地记录');
+                this.displayResults();
                 return;
             }
 
             if (!isAuthenticated || !window.auth?.currentUser) {
-                this.addResult('检查记录', 'error', '用户未登录，无法检查云端记录');
+                this.addResult('用户状态', 'warning', '用户未登录，无法检查云端记录');
+                this.displayResults();
                 return;
             }
 
@@ -378,16 +387,54 @@ class FirebaseDebugger {
     // 检查本地记录
     checkLocalRecords() {
         try {
-            const user = window.authManager?.getCurrentUser();
-            const key = user ? `timeTrackerRecords_${user.uid}` : 'timeTrackerRecords';
-            const saved = localStorage.getItem(key);
-            const records = saved ? JSON.parse(saved) : [];
+            let allRecords = [];
             
-            return records.map(record => ({
-                ...record,
-                startTime: new Date(record.startTime),
-                endTime: new Date(record.endTime)
-            }));
+            // 检查所有可能的存储键
+            const keysToCheck = ['timeTrackerRecords'];
+            
+            // 如果有用户，也检查用户特定的键
+            const user = window.authManager?.getCurrentUser();
+            if (user && user.uid) {
+                keysToCheck.push(`timeTrackerRecords_${user.uid}`);
+            }
+            
+            // 检查所有localStorage中的timeTracker相关键
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('timeTracker') && !keysToCheck.includes(key)) {
+                    keysToCheck.push(key);
+                }
+            }
+            
+            console.log('🔍 检查本地存储键:', keysToCheck);
+            
+            for (const key of keysToCheck) {
+                const saved = localStorage.getItem(key);
+                if (saved) {
+                    try {
+                        const records = JSON.parse(saved);
+                        if (Array.isArray(records) && records.length > 0) {
+                            console.log(`📦 从 ${key} 找到 ${records.length} 条记录`);
+                            const processedRecords = records.map(record => ({
+                                ...record,
+                                startTime: new Date(record.startTime),
+                                endTime: record.endTime ? new Date(record.endTime) : null,
+                                source: key
+                            }));
+                            allRecords.push(...processedRecords);
+                        }
+                    } catch (parseError) {
+                        console.warn(`解析 ${key} 失败:`, parseError);
+                    }
+                }
+            }
+            
+            // 按开始时间排序
+            allRecords.sort((a, b) => b.startTime - a.startTime);
+            
+            console.log(`📊 总共找到 ${allRecords.length} 条本地记录`);
+            return allRecords;
+            
         } catch (e) {
             console.error('检查本地记录失败:', e);
             return [];
