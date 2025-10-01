@@ -941,11 +941,10 @@ body {
 
 .y-axis-labels {
     display: flex;
-    flex-direction: column;
+    flex-direction: column-reverse; /* 让0点在底部，24点在顶部 */
     justify-content: space-between;
     height: 280px;
     margin-right: 10px;
-    transform: translateY(-0.4em); /* 向上偏移，与网格线对齐 */
 }
 
 .y-label {
