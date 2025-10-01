@@ -25,6 +25,10 @@ class TimeTracker {
         
         this.initializeElements();
         this.bindEvents();
+        
+        // 恢复之前保存的计时状态
+        this.restoreTimerState();
+        
         this.updateDisplay();
         this.renderCalendar();
         this.renderTodayStats();
@@ -123,6 +127,9 @@ class TimeTracker {
         this.updateButtons();
         this.updateCurrentActivity();
         this.startTimer();
+        
+        // 保存计时状态
+        this.saveTimerState();
     }
 
     pause() {
@@ -131,6 +138,9 @@ class TimeTracker {
             this.pausedTime = Date.now() - this.startTime;
             this.stopTimer();
             this.updateButtons();
+            
+            // 保存计时状态
+            this.saveTimerState();
         }
     }
 
@@ -147,6 +157,9 @@ class TimeTracker {
                 duration: duration,
                 date: endTime.toDateString()
             });
+            
+            // 清除保存的计时状态
+            this.clearTimerState();
             
             // 重置状态
             this.reset();
@@ -174,6 +187,9 @@ class TimeTracker {
         this.renderTodayStats();
         this.renderRecords();
         this.renderCalendar();
+        
+        // 清除保存的计时状态
+        this.clearTimerState();
     }
 
     startTimer() {
@@ -264,6 +280,83 @@ class TimeTracker {
         } else {
             return `${seconds}秒`;
         }
+    }
+
+    // 保存计时状态到localStorage
+    saveTimerState() {
+        if (!this.currentUser) return;
+        
+        const timerState = {
+            isRunning: this.isRunning,
+            isPaused: this.isPaused,
+            startTime: this.startTime,
+            pausedTime: this.pausedTime,
+            currentActivity: this.currentActivity,
+            userId: this.currentUser.uid
+        };
+        
+        const key = `timerState_${this.currentUser.uid}`;
+        localStorage.setItem(key, JSON.stringify(timerState));
+    }
+
+    // 从localStorage恢复计时状态
+    restoreTimerState() {
+        if (!this.currentUser) return false;
+        
+        const key = `timerState_${this.currentUser.uid}`;
+        const savedState = localStorage.getItem(key);
+        
+        if (!savedState) return false;
+        
+        try {
+            const timerState = JSON.parse(savedState);
+            
+            // 验证状态是否属于当前用户
+            if (timerState.userId !== this.currentUser.uid) {
+                return false;
+            }
+            
+            // 如果之前在运行状态，恢复计时
+            if (timerState.isRunning) {
+                this.isRunning = timerState.isRunning;
+                this.isPaused = timerState.isPaused;
+                this.currentActivity = timerState.currentActivity;
+                
+                if (timerState.isPaused) {
+                    // 如果是暂停状态，恢复暂停时间
+                    this.pausedTime = timerState.pausedTime;
+                    this.startTime = timerState.startTime;
+                } else {
+                    // 如果是运行状态，重新计算开始时间
+                    this.startTime = timerState.startTime;
+                    this.pausedTime = 0;
+                }
+                
+                // 更新界面
+                this.updateButtons();
+                this.updateCurrentActivity();
+                this.updateDisplay();
+                
+                // 如果不是暂停状态，启动计时器
+                if (!this.isPaused) {
+                    this.startTimer();
+                }
+                
+                return true;
+            }
+        } catch (error) {
+            console.error('恢复计时状态失败:', error);
+        }
+        
+        return false;
+    }
+
+    // 清除保存的计时状态
+    clearTimerState() {
+        if (!this.currentUser) return;
+        
+        const key = `timerState_${this.currentUser.uid}`;
+        localStorage.removeItem(key);
     }
 
     async saveRecord(record) {
