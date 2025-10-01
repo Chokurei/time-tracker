@@ -1,3 +1,25 @@
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+    --accent-color: #f093fb;
+    --background-color: #f8fafc;
+    --text-color: #2d3748;
+    --border-color: #e2e8f0;
+    --success-color: #48bb78;
+    --warning-color: #ed8936;
+    --error-color: #f56565;
+    
+    /* 活动颜色变量 */
+    --work-color: #667eea;
+    --study-color: #f093fb;
+    --exercise-color: #48bb78;
+    --rest-color: #ed8936;
+    --entertainment-color: #f56565;
+    --meeting-color: #38b2ac;
+    --chores-color: #9f7aea;
+    --other-color: #a0aec0;
+}
+
 /* 全局样式 */
 * {
     margin: 0;
@@ -518,6 +540,8 @@ body {
 .activity-indicator.exercise { background: #4caf50; }
 .activity-indicator.rest { background: #9c27b0; }
 .activity-indicator.entertainment { background: #e91e63; }
+.activity-indicator.meeting { background: #00bcd4; }
+.activity-indicator.chores { background: #795548; }
 .activity-indicator.other { background: #607d8b; }
 
 /* 记录列表 */
@@ -565,6 +589,8 @@ body {
 .record-icon.exercise { background: #4caf50; }
 .record-icon.rest { background: #9c27b0; }
 .record-icon.entertainment { background: #e91e63; }
+.record-icon.meeting { background: #00bcd4; }
+.record-icon.chores { background: #795548; }
 .record-icon.other { background: #607d8b; }
 
 .record-details h4 {
@@ -705,8 +731,11 @@ body {
 
 .daily-chart-container {
     display: flex;
-    gap: 15px;
-    margin-bottom: 20px;
+    align-items: flex-end;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     min-height: 300px;
 }
 
@@ -719,10 +748,10 @@ body {
 
 .y-axis-labels {
     display: flex;
-    flex-direction: column;
+    flex-direction: column-reverse;
     justify-content: space-between;
     height: 280px;
-    padding: 10px 0;
+    margin-right: 10px;
 }
 
 .y-label {
@@ -738,6 +767,35 @@ body {
     flex-direction: column;
 }
 
+.chart-x-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding: 0 4px;
+}
+
+.x-label {
+    flex: 1;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.x-label.today {
+    color: #667eea;
+    font-weight: 600;
+}
+
+.label-day {
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.label-date {
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+
 .chart-grid {
     flex: 1;
     display: flex;
@@ -749,6 +807,8 @@ body {
     position: relative;
     min-height: 280px;
 }
+
+
 
 .chart-grid::before {
     content: '';
@@ -766,13 +826,27 @@ body {
 
 .chart-bar {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    min-height: 100%;
+    min-height: 280px;
+    height: 280px;
     position: relative;
     cursor: pointer;
     transition: transform 0.2s ease;
+    border: 1px solid #e0e0e0;
+    background: linear-gradient(to bottom, 
+        transparent 0%, transparent calc(100%/24 - 1px), 
+        #f0f0f0 calc(100%/24 - 1px), #f0f0f0 calc(100%/24),
+        transparent calc(100%/24), transparent calc(200%/24 - 1px),
+        #f0f0f0 calc(200%/24 - 1px), #f0f0f0 calc(200%/24),
+        transparent calc(200%/24), transparent calc(300%/24 - 1px),
+        #f0f0f0 calc(300%/24 - 1px), #f0f0f0 calc(300%/24),
+        transparent calc(300%/24), transparent calc(400%/24 - 1px),
+        #f0f0f0 calc(400%/24 - 1px), #f0f0f0 calc(400%/24),
+        transparent calc(400%/24), transparent calc(500%/24 - 1px),
+        #f0f0f0 calc(500%/24 - 1px), #f0f0f0 calc(500%/24),
+        transparent calc(500%/24), transparent calc(600%/24 - 1px),
+        #f0f0f0 calc(600%/24 - 1px), #f0f0f0 calc(600%/24),
+        transparent calc(600%/24)
+    );
 }
 
 .chart-bar:hover {
@@ -783,6 +857,23 @@ body {
     width: 100%;
     transition: all 0.3s ease;
     position: relative;
+}
+
+.bar-segment.time-slot {
+    border-radius: 2px;
+    opacity: 0.8;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.bar-segment.time-slot:hover {
+    opacity: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.bar-segment.empty-state {
+    background-color: #f0f0f0 !important;
+    border: 1px dashed #ccc;
+    opacity: 0.6;
 }
 
 .bar-segment:hover::after {
@@ -869,6 +960,8 @@ body {
 .legend-color.exercise { background-color: #4facfe; }
 .legend-color.rest { background-color: #43e97b; }
 .legend-color.entertainment { background-color: #fa709a; }
+.legend-color.meeting { background-color: #00bcd4; }
+.legend-color.chores { background-color: #795548; }
 .legend-color.other { background-color: #ffecd2; }
 
 .legend-text {
@@ -882,6 +975,8 @@ body {
 .activity-exercise { background-color: #4facfe; }
 .activity-rest { background-color: #43e97b; }
 .activity-entertainment { background-color: #fa709a; }
+.activity-meeting { background-color: #00bcd4; }
+.activity-chores { background-color: #795548; }
 .activity-other { background-color: #ffecd2; }
 
 /* 响应式设计 */
