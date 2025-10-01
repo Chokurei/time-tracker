@@ -25,10 +25,6 @@ class TimeTracker {
         
         this.initializeElements();
         this.bindEvents();
-        
-        // 恢复之前保存的计时状态
-        this.restoreTimerState();
-        
         this.updateDisplay();
         this.renderCalendar();
         this.renderTodayStats();
@@ -40,6 +36,13 @@ class TimeTracker {
     async initializeForUser(user) {
         console.log('🔄 初始化用户数据:', user);
         this.currentUser = user;
+        
+        // 恢复之前保存的计时状态
+        const restored = this.restoreTimerState();
+        if (restored) {
+            console.log('⏰ 恢复了之前的计时状态');
+        }
+        
         await this.loadUserRecords();
         console.log('📊 加载完成，记录数量:', this.records.length);
         this.renderRecords();
