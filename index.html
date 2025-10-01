@@ -96,6 +96,8 @@
                         <option value="exercise">运动</option>
                         <option value="rest">休息</option>
                         <option value="entertainment">娱乐</option>
+                        <option value="meeting">会议</option>
+                        <option value="chores">杂务</option>
                         <option value="other">其他</option>
                     </select>
                     <input type="text" id="customActivity" placeholder="自定义活动名称" style="display: none;">
@@ -139,27 +141,33 @@
                 </div>
             </section>
 
-            <!-- 每日使用情况柱状图 -->
+            <!-- 每日使用柱状图 -->
             <section class="daily-chart-section">
-                <h2>每日使用情况</h2>
+                <h2>每日使用柱状图</h2>
                 <div class="chart-controls">
                     <button id="prevWeek" class="btn btn-outline">
-                        <i class="fas fa-chevron-left"></i> 上周
+                        <i class="fas fa-chevron-left"></i> 前一周
                     </button>
                     <span id="currentWeek"></span>
                     <button id="nextWeek" class="btn btn-outline">
-                        下周 <i class="fas fa-chevron-right"></i>
+                        后一周 <i class="fas fa-chevron-right"></i>
                     </button>
                 </div>
                 <div class="daily-chart-container">
                     <div class="chart-y-axis">
                         <div class="y-axis-labels">
                             <span class="y-label">24</span>
+                            <span class="y-label">22</span>
                             <span class="y-label">20</span>
+                            <span class="y-label">18</span>
                             <span class="y-label">16</span>
+                            <span class="y-label">14</span>
                             <span class="y-label">12</span>
+                            <span class="y-label">10</span>
                             <span class="y-label">8</span>
+                            <span class="y-label">6</span>
                             <span class="y-label">4</span>
+                            <span class="y-label">2</span>
                             <span class="y-label">0</span>
                         </div>
                     </div>
@@ -167,10 +175,8 @@
                         <div class="chart-grid" id="dailyChart">
                             <!-- 柱状图将通过JavaScript动态生成 -->
                         </div>
-                        <div class="chart-x-axis">
-                            <div class="x-axis-labels" id="chartXLabels">
-                                <!-- 日期标签将通过JavaScript动态生成 -->
-                            </div>
+                        <div class="chart-x-labels" id="chartXLabels">
+                            <!-- X轴标签将通过JavaScript动态生成 -->
                         </div>
                     </div>
                 </div>
@@ -194,6 +200,14 @@
                     <div class="legend-item">
                         <span class="legend-color entertainment"></span>
                         <span class="legend-text">娱乐</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color meeting"></span>
+                        <span class="legend-text">会议</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color chores"></span>
+                        <span class="legend-text">杂务</span>
                     </div>
                     <div class="legend-item">
                         <span class="legend-color other"></span>
