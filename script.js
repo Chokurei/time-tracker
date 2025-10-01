@@ -18,7 +18,8 @@ class TimeTracker {
         this.updateDisplay();
         this.renderCalendar();
         this.renderTodayStats();
-        this.renderRecords();
+        // 不在构造函数中渲染记录，等待用户登录后再渲染
+        this.renderEmptyRecords();
     }
 
     // 为用户初始化数据
@@ -26,21 +27,28 @@ class TimeTracker {
         this.currentUser = user;
         
         if (user) {
+            console.log('🔄 为用户初始化应用:', user.email || user.uid);
+            
             // 先尝试加载用户记录，如果失败则使用空数组
             try {
                 await this.loadUserRecords();
+                console.log(`✅ 用户记录加载完成，共 ${this.records.length} 条记录`);
             } catch (error) {
                 console.error('加载用户记录失败:', error);
                 this.records = [];
             }
             
+            // 强制重新渲染所有组件
             this.updateDisplay();
             this.renderCalendar();
             this.renderTodayStats();
             this.renderRecords();
+            
+            console.log('🎉 应用初始化完成');
         } else {
             // 用户登出时清空记录
             this.records = [];
+            this.renderEmptyRecords();
         }
     }
 
@@ -305,18 +313,21 @@ class TimeTracker {
             
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                this.records.push({
+                const record = {
                     ...data,
                     id: doc.id,
                     startTime: data.startTime.toDate(),
                     endTime: data.endTime.toDate()
-                });
+                };
+                this.records.push(record);
+                console.log('📝 加载记录:', record);
             });
 
             // 客户端排序：按开始时间降序排列
             this.records.sort((a, b) => b.startTime - a.startTime);
 
             console.log(`✅ 从云端加载了 ${this.records.length} 条记录`);
+            console.log('📊 排序后的记录数组:', this.records);
             this.isOffline = false;
             
             // 同时保存到本地作为备份
@@ -502,10 +513,19 @@ class TimeTracker {
         this.todayStatsEl.innerHTML = html;
     }
 
+    renderEmptyRecords() {
+        this.recordsListEl.innerHTML = '<div class="record-item"><div class="record-info">请先登录以查看记录</div></div>';
+    }
+
     renderRecords() {
+        console.log('🎨 开始渲染记录，总记录数:', this.records.length);
+        console.log('📋 记录数组内容:', this.records);
+        
         const recentRecords = this.records.slice(-10).reverse();
+        console.log('📋 准备渲染的最近记录:', recentRecords);
         
         if (recentRecords.length === 0) {
+            console.log('⚠️ 没有记录可显示，显示空状态');
             this.recordsListEl.innerHTML = '<div class="record-item"><div class="record-info">暂无记录</div></div>';
             return;
         }
@@ -647,7 +667,8 @@ class TimeTracker {
 
 // 初始化应用
 document.addEventListener('DOMContentLoaded', () => {
-    new TimeTracker();
+    // 创建TimeTracker实例并分配给全局变量
+    window.timeTracker = new TimeTracker();
     
     // 添加一些提示信息
     console.log('时间记录器已启动！');
