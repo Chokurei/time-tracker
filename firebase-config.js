@@ -70,32 +70,38 @@ async function initializeFirebase() {
 
         // 初始化Firebase（检查是否已经初始化）
         console.log('🚀 开始Firebase应用初始化...');
+        function checkFirebaseConfig() {
+            if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                throw new Error('Firebase配置不完整');
+            }
+        }
         let app;
         try {
-            app = getApp(); // 尝试获取已存在的应用
-            console.log('✅ 使用已存在的Firebase应用');
+            app = getApp();
         } catch (error) {
-            // 如果应用不存在，则初始化新应用
-            console.log('🚀 初始化新的Firebase应用');
-            console.log('配置对象:', firebaseConfig);
             app = initializeApp(firebaseConfig);
-            console.log('✅ Firebase应用初始化完成');
         }
         
-        console.log('🔐 初始化Auth服务...');
+        window.app = app;
         window.auth = getAuth(app);
-        console.log('🗄️ 初始化Firestore服务...');
         window.db = getFirestore(app);
-
-        console.log('✅ Firebase初始化成功');
-        console.log('🔐 Auth对象:', window.auth ? '已创建' : '创建失败');
-        console.log('🗄️ Firestore对象:', window.db ? '已创建' : '创建失败');
-        console.log('🎉 所有Firebase服务已准备就绪');
-        return true;
+        
+        await connectAuthEmulator(window.auth, 'http://localhost:9099');
+        connectFirestoreEmulator(window.db, 'localhost', 8080);
+        
+        const firebaseInitialized = new CustomEvent('firebaseInitialized', {
+            detail: { 
+                app: window.app, 
+                auth: window.auth, 
+                db: window.db 
+            }
+        });
+        
+        document.dispatchEvent(firebaseInitialized);
+        
     } catch (error) {
         console.error('Firebase初始化失败:', error);
-        showFirebaseConfigWarning();
-        return false;
+        throw error;
     }
 }
 

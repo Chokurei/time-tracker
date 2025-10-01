@@ -13,6 +13,16 @@ class TimeTracker {
         this.isOffline = false;
         this.pendingSync = [];
         
+        // 活动类型图标映射
+        this.activityIcons = {
+            'work': 'fas fa-briefcase',
+            'study': 'fas fa-book',
+            'exercise': 'fas fa-dumbbell',
+            'rest': 'fas fa-bed',
+            'entertainment': 'fas fa-gamepad',
+            'other': 'fas fa-circle'
+        };
+        
         this.initializeElements();
         this.bindEvents();
         this.updateDisplay();
@@ -24,32 +34,15 @@ class TimeTracker {
 
     // 为用户初始化数据
     async initializeForUser(user) {
+        console.log('🔄 初始化用户数据:', user);
         this.currentUser = user;
-        
-        if (user) {
-            console.log('🔄 为用户初始化应用:', user.email || user.uid);
-            
-            // 先尝试加载用户记录，如果失败则使用空数组
-            try {
-                await this.loadUserRecords();
-                console.log(`✅ 用户记录加载完成，共 ${this.records.length} 条记录`);
-            } catch (error) {
-                console.error('加载用户记录失败:', error);
-                this.records = [];
-            }
-            
-            // 强制重新渲染所有组件
-            this.updateDisplay();
-            this.renderCalendar();
-            this.renderTodayStats();
-            this.renderRecords();
-            
-            console.log('🎉 应用初始化完成');
-        } else {
-            // 用户登出时清空记录
-            this.records = [];
-            this.renderEmptyRecords();
-        }
+        await this.loadUserRecords();
+        console.log('📊 加载完成，记录数量:', this.records.length);
+        this.renderRecords();
+        this.renderCalendar();
+        this.initializeDailyChart();
+        this.renderDailyChart();
+        console.log('✅ 用户初始化完成');
     }
 
     initializeElements() {
@@ -157,6 +150,9 @@ class TimeTracker {
             
             // 重置状态
             this.reset();
+            
+            // 更新按钮状态
+            this.updateButtons();
             
             // 更新显示
             this.renderTodayStats();
@@ -273,6 +269,7 @@ class TimeTracker {
     async saveRecord(record) {
         this.records.push(record);
         await this.saveUserRecords();
+        this.renderDailyChart();
     }
 
     // 加载用户记录
@@ -387,20 +384,19 @@ class TimeTracker {
         try {
             const { collection, addDoc, Timestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             
-            const recordsRef = collection(window.db, 'timeRecords');
-            const docRef = await addDoc(recordsRef, {
+            const recordData = {
                 userId: this.currentUser.uid,
                 activity: record.activity,
                 startTime: Timestamp.fromDate(record.startTime),
                 endTime: Timestamp.fromDate(record.endTime),
                 duration: record.duration,
-                date: record.date
-            });
-
-            // 更新本地记录的ID
-            record.id = docRef.id;
-            console.log('记录已保存到云端:', docRef.id);
+                date: record.date,
+                createdAt: Timestamp.now()
+            };
             
+            const recordsRef = collection(window.db, 'timeRecords');
+            const docRef = await addDoc(recordsRef, recordData);
+            console.log('记录已保存到云端，文档ID:', docRef.id);
         } catch (error) {
             console.error('保存记录到云端失败:', error);
             throw error;
@@ -518,38 +514,28 @@ class TimeTracker {
     }
 
     renderRecords() {
-        console.log('🎨 开始渲染记录，总记录数:', this.records.length);
-        console.log('📋 记录数组内容:', this.records);
+        console.log('🎨 开始渲染记录，总数:', this.records.length);
+        const recordsList = document.getElementById('recordsList');
         
-        const recentRecords = this.records.slice(-10).reverse();
-        console.log('📋 准备渲染的最近记录:', recentRecords);
-        
-        if (recentRecords.length === 0) {
-            console.log('⚠️ 没有记录可显示，显示空状态');
-            this.recordsListEl.innerHTML = '<div class="record-item"><div class="record-info">暂无记录</div></div>';
+        if (this.records.length === 0) {
+            console.log('📝 无记录，显示空状态');
+            recordsList.innerHTML = '<div class="no-records">暂无记录</div>';
             return;
         }
+
+        const recentRecords = this.records.slice(-10).reverse();
+        console.log('📋 渲染最近记录数量:', recentRecords.length);
         
-        const activityIcons = {
-            work: 'fas fa-briefcase',
-            study: 'fas fa-book',
-            exercise: 'fas fa-dumbbell',
-            rest: 'fas fa-bed',
-            entertainment: 'fas fa-gamepad',
-            other: 'fas fa-circle'
-        };
-        
-        let html = '';
-        recentRecords.forEach(record => {
+        const html = recentRecords.map(record => {
             const date = new Date(record.startTime);
             const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
             const dateStr = date.toLocaleDateString('zh-CN');
             
-            html += `
+            return `
                 <div class="record-item">
                     <div class="record-info">
                         <div class="record-icon ${record.type}">
-                            <i class="${activityIcons[record.type] || 'fas fa-circle'}"></i>
+                            <i class="${this.activityIcons[record.type] || 'fas fa-circle'}"></i>
                         </div>
                         <div class="record-details">
                             <h4>${record.activity}</h4>
@@ -559,9 +545,10 @@ class TimeTracker {
                     <div class="record-duration">${this.formatDuration(record.duration)}</div>
                 </div>
             `;
-        });
+        }).join('');
         
-        this.recordsListEl.innerHTML = html;
+        recordsList.innerHTML = html;
+        console.log('✅ 记录渲染完成');
     }
 
     renderCalendar() {
@@ -634,7 +621,10 @@ class TimeTracker {
     }
 
     showDayDetails(dateStr) {
-        const dayRecords = this.records.filter(record => record.date === dateStr);
+        const dayRecords = this.records.filter(record => {
+            const recordDate = new Date(record.startTime).toISOString().split('T')[0];
+            return recordDate === dateStr;
+        });
         
         if (dayRecords.length === 0) {
             alert('这一天没有记录');
@@ -643,6 +633,7 @@ class TimeTracker {
         
         let details = `${new Date(dateStr).toLocaleDateString('zh-CN')} 的活动记录:\n\n`;
         
+        // 显示详细记录
         dayRecords.forEach(record => {
             const startTime = new Date(record.startTime).toLocaleTimeString('zh-CN', { 
                 hour: '2-digit', 
@@ -650,6 +641,31 @@ class TimeTracker {
             });
             details += `${startTime} - ${record.activity}: ${this.formatDuration(record.duration)}\n`;
         });
+        
+        // 计算每个活动类型的总时间
+        const activityStats = {};
+        dayRecords.forEach(record => {
+            if (!activityStats[record.activity]) {
+                activityStats[record.activity] = 0;
+            }
+            activityStats[record.activity] += record.duration;
+        });
+        
+        // 添加统计信息
+        details += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        details += '📊 当日活动统计:\n\n';
+        
+        // 按时间长短排序显示
+        const sortedStats = Object.entries(activityStats)
+            .sort(([,a], [,b]) => b - a);
+        
+        let totalTime = 0;
+        sortedStats.forEach(([activity, duration]) => {
+            details += `${activity}: ${this.formatDuration(duration)}\n`;
+            totalTime += duration;
+        });
+        
+        details += `\n总计: ${this.formatDuration(totalTime)}`;
         
         alert(details);
     }
@@ -662,6 +678,185 @@ class TimeTracker {
     nextMonth() {
         this.currentMonth.setMonth(this.currentMonth.getMonth() + 1);
         this.renderCalendar();
+    }
+
+    // 柱状图相关方法
+    initializeDailyChart() {
+        this.currentWeekStart = this.getWeekStart(new Date());
+        this.bindChartEvents();
+        this.renderDailyChart();
+    }
+
+    bindChartEvents() {
+        console.log('🔗 绑定图表事件');
+        const prevWeekBtn = document.getElementById('prevWeek');
+        const nextWeekBtn = document.getElementById('nextWeek');
+        
+        console.log('🔍 查找按钮元素:', { prevWeekBtn, nextWeekBtn });
+
+        if (prevWeekBtn) {
+            console.log('✅ 绑定上周按钮事件');
+            prevWeekBtn.addEventListener('click', () => {
+                console.log('🔙 点击上周按钮');
+                const newDate = new Date(this.currentWeekStart);
+                newDate.setDate(newDate.getDate() - 7);
+                this.currentWeekStart = newDate;
+                this.renderDailyChart();
+            });
+        } else {
+            console.log('❌ 未找到上周按钮');
+        }
+
+        if (nextWeekBtn) {
+            console.log('✅ 绑定下周按钮事件');
+            nextWeekBtn.addEventListener('click', () => {
+                console.log('🔜 点击下周按钮');
+                const newDate = new Date(this.currentWeekStart);
+                newDate.setDate(newDate.getDate() + 7);
+                this.currentWeekStart = newDate;
+                this.renderDailyChart();
+            });
+        } else {
+            console.log('❌ 未找到下周按钮');
+        }
+    }
+
+    getWeekStart(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 调整为周一开始
+        return new Date(d.setDate(diff));
+    }
+
+    getWeekDates(weekStart) {
+        const dates = [];
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(weekStart);
+            date.setDate(weekStart.getDate() + i);
+            dates.push(date);
+        }
+        return dates;
+    }
+
+    getDailyData(date) {
+        const dateStr = date.toISOString().split('T')[0];
+        const dayRecords = this.records.filter(record => {
+            const recordDate = new Date(record.startTime).toISOString().split('T')[0];
+            return recordDate === dateStr;
+        });
+
+        const activityData = {
+            work: 0,
+            study: 0,
+            exercise: 0,
+            rest: 0,
+            entertainment: 0,
+            other: 0
+        };
+
+        dayRecords.forEach(record => {
+            const activity = record.activity || 'other';
+            activityData[activity] += record.duration || 0;
+        });
+
+        return activityData;
+    }
+
+    renderDailyChart() {
+        const chartGrid = document.getElementById('dailyChart');
+        const chartXLabels = document.getElementById('chartXLabels');
+        const currentWeekSpan = document.getElementById('currentWeek');
+
+        if (!chartGrid || !chartXLabels || !currentWeekSpan) return;
+
+        // 确保currentWeekStart已初始化
+        if (!this.currentWeekStart) {
+            this.currentWeekStart = this.getWeekStart(new Date());
+        }
+
+        const weekDates = this.getWeekDates(this.currentWeekStart);
+        
+        // 更新周期显示
+        const weekEnd = new Date(this.currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        currentWeekSpan.textContent = `${this.currentWeekStart.toLocaleDateString('zh-CN', { 
+            month: 'short', 
+            day: 'numeric' 
+        })} - ${weekEnd.toLocaleDateString('zh-CN', { 
+            month: 'short', 
+            day: 'numeric' 
+        })}`;
+
+        // 清空现有内容
+        chartGrid.innerHTML = '';
+        chartXLabels.innerHTML = '';
+
+        // 生成每日柱状图
+        weekDates.forEach(date => {
+            const dailyData = this.getDailyData(date);
+            const totalHours = Object.values(dailyData).reduce((sum, duration) => sum + duration, 0) / (1000 * 60 * 60);
+            
+            // 创建柱状图条
+            const chartBar = document.createElement('div');
+            chartBar.className = 'chart-bar';
+            
+            // 按活动类型堆叠
+            const activities = ['work', 'study', 'exercise', 'rest', 'entertainment', 'other'];
+            activities.forEach(activity => {
+                if (dailyData[activity] > 0) {
+                    const segment = document.createElement('div');
+                    segment.className = `bar-segment activity-${activity}`;
+                    
+                    const hours = dailyData[activity] / (1000 * 60 * 60);
+                    const height = (hours / 24) * 280; // 280px是图表的最大高度
+                    segment.style.height = `${height}px`;
+                    
+                    // 添加工具提示
+                    const activityNames = {
+                        work: '工作',
+                        study: '学习',
+                        exercise: '运动',
+                        rest: '休息',
+                        entertainment: '娱乐',
+                        other: '其他'
+                    };
+                    segment.setAttribute('data-tooltip', 
+                        `${activityNames[activity]}: ${this.formatDuration(dailyData[activity])}`);
+                    
+                    chartBar.appendChild(segment);
+                }
+            });
+
+            chartGrid.appendChild(chartBar);
+
+            // 创建X轴标签
+            const xLabel = document.createElement('div');
+            xLabel.className = 'x-label';
+            xLabel.textContent = date.toLocaleDateString('zh-CN', { 
+                month: 'numeric', 
+                day: 'numeric' 
+            });
+            
+            // 添加点击事件，显示当日详情
+            const dateStr = date.toISOString().split('T')[0];
+            xLabel.style.cursor = 'pointer';
+            xLabel.addEventListener('click', () => {
+                this.showDayDetails(dateStr);
+            });
+            
+            // 如果有记录，添加视觉提示
+            const dayRecords = this.records.filter(record => {
+                const recordDate = new Date(record.startTime).toISOString().split('T')[0];
+                return recordDate === dateStr;
+            });
+            
+            if (dayRecords.length > 0) {
+                xLabel.classList.add('has-records');
+                xLabel.title = `点击查看 ${dayRecords.length} 条记录`;
+            }
+            
+            chartXLabels.appendChild(xLabel);
+        });
     }
 }
 

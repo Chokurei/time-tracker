@@ -109,9 +109,6 @@ class SyncManager {
             // 客户端排序：按开始时间降序排列
             cloudRecords.sort((a, b) => b.startTime - a.startTime);
 
-            console.log(`📥 从云端获取到 ${cloudRecords.length} 条记录`);
-            console.log(`📱 本地当前有 ${window.timeTracker.records.length} 条记录`);
-
             // 合并云端和本地数据，去重
             const mergedRecords = this.mergeRecords(window.timeTracker.records, cloudRecords);
             
@@ -123,10 +120,6 @@ class SyncManager {
                 window.timeTracker.renderTodayStats();
                 window.timeTracker.renderRecords();
                 window.timeTracker.renderCalendar();
-                
-                console.log(`✅ 同步完成，现在共有 ${mergedRecords.length} 条记录`);
-            } else {
-                console.log('📊 数据已是最新，无需更新');
             }
 
         } catch (error) {

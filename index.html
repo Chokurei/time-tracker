@@ -139,6 +139,69 @@
                 </div>
             </section>
 
+            <!-- 每日使用情况柱状图 -->
+            <section class="daily-chart-section">
+                <h2>每日使用情况</h2>
+                <div class="chart-controls">
+                    <button id="prevWeek" class="btn btn-outline">
+                        <i class="fas fa-chevron-left"></i> 上周
+                    </button>
+                    <span id="currentWeek"></span>
+                    <button id="nextWeek" class="btn btn-outline">
+                        下周 <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="daily-chart-container">
+                    <div class="chart-y-axis">
+                        <div class="y-axis-labels">
+                            <span class="y-label">24</span>
+                            <span class="y-label">20</span>
+                            <span class="y-label">16</span>
+                            <span class="y-label">12</span>
+                            <span class="y-label">8</span>
+                            <span class="y-label">4</span>
+                            <span class="y-label">0</span>
+                        </div>
+                    </div>
+                    <div class="chart-content">
+                        <div class="chart-grid" id="dailyChart">
+                            <!-- 柱状图将通过JavaScript动态生成 -->
+                        </div>
+                        <div class="chart-x-axis">
+                            <div class="x-axis-labels" id="chartXLabels">
+                                <!-- 日期标签将通过JavaScript动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <span class="legend-color work"></span>
+                        <span class="legend-text">工作</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color study"></span>
+                        <span class="legend-text">学习</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color exercise"></span>
+                        <span class="legend-text">运动</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color rest"></span>
+                        <span class="legend-text">休息</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color entertainment"></span>
+                        <span class="legend-text">娱乐</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color other"></span>
+                        <span class="legend-text">其他</span>
+                    </div>
+                </div>
+            </section>
+
             <!-- 活动记录 -->
             <section class="records-section">
                 <h2>最近记录</h2>
@@ -153,6 +216,5 @@
     <script src="auth.js"></script>
     <script src="sync-manager.js"></script>
     <script src="script.js"></script>
-    <script src="debug-firebase.js"></script>
 </body>
 </html>
