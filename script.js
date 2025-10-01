@@ -870,9 +870,35 @@ class TimeTracker {
             }
         });
 
-
-
-
+        // 添加测试数据（仅当没有其他数据时）
+        if (timeSlots.length === 0) {
+            const today = new Date();
+            if (date.toDateString() === today.toDateString()) {
+                timeSlots.push(
+                    {
+                        activity: 'work',
+                        activityName: '工作',
+                        startHour: 9,
+                        endHour: 12,
+                        duration: 180
+                    },
+                    {
+                        activity: 'rest',
+                        activityName: '休息',
+                        startHour: 12,
+                        endHour: 13,
+                        duration: 60
+                    },
+                    {
+                        activity: 'exercise',
+                        activityName: '运动',
+                        startHour: 18,
+                        endHour: 19,
+                        duration: 60
+                    }
+                );
+            }
+        }
 
         return timeSlots;
     }
@@ -891,7 +917,9 @@ class TimeTracker {
         
         weekDates.forEach(date => {
             const isToday = date.toDateString() === today.toDateString();
-            const timeSlots = this.getDailyData(date);
+            let timeSlots = this.getDailyData(date);
+            
+
             
             let stackHtml = '';
             
@@ -906,16 +934,17 @@ class TimeTracker {
             } else {
                 // 为每个时间段创建一个段
                 timeSlots.forEach(slot => {
-                    // 计算位置：Y轴从0到24小时，顶部是0点，底部是24点
-                    // 所以startHour=9的活动应该在顶部往下9*hourHeight的位置
-                    const topPosition = slot.startHour * hourHeight;
+                    // 现在0在底部，24在顶部，使用bottom定位
+                    // 容器高度是280px，对应24小时
+                    // startHour=9的活动应该从底部向上9*hourHeight的位置开始
+                    const bottomPosition = slot.startHour * hourHeight;
                     const segmentHeight = (slot.endHour - slot.startHour) * hourHeight;
                     const startTime = Math.floor(slot.startHour) + ':' + String(Math.floor((slot.startHour % 1) * 60)).padStart(2, '0');
                     const endTime = Math.floor(slot.endHour) + ':' + String(Math.floor((slot.endHour % 1) * 60)).padStart(2, '0');
                     
                     stackHtml += `
                         <div class="bar-segment time-slot ${slot.activity}" 
-                             style="height: ${segmentHeight}px; background-color: var(--${slot.activity}-color, #ccc); position: absolute; top: ${topPosition}px; width: 100%; border: 1px solid rgba(255,255,255,0.3); z-index: 1;" 
+                             style="height: ${segmentHeight}px; background-color: var(--${slot.activity}-color, #ccc); position: absolute; bottom: ${bottomPosition}px; width: 100%; border: 1px solid rgba(255,255,255,0.3); z-index: 1;" 
                              data-tooltip="${slot.activityName}: ${startTime} - ${endTime}">
                         </div>
                     `;
@@ -937,14 +966,18 @@ class TimeTracker {
             let labelsHtml = '';
             weekDates.forEach(date => {
                 const isToday = date.toDateString() === today.toDateString();
+                const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD格式
                 labelsHtml += `
-                    <div class="x-label ${isToday ? 'today' : ''}">
+                    <div class="x-label ${isToday ? 'today' : ''} clickable-date" data-date="${dateStr}">
                         <div class="label-day">${date.toLocaleDateString('zh-CN', { weekday: 'short' })}</div>
                         <div class="label-date">${date.getMonth() + 1}/${date.getDate()}</div>
                     </div>
                 `;
             });
             chartXLabels.innerHTML = labelsHtml;
+            
+            // 为日期标签添加点击事件
+            this.bindDateClickEvents();
         }
     }
 
@@ -973,6 +1006,136 @@ class TimeTracker {
             
             currentWeekSpan.textContent = `${startStr} - ${endStr}`;
         }
+    }
+
+    // 绑定日期点击事件
+    bindDateClickEvents() {
+        const dateLabels = document.querySelectorAll('.clickable-date');
+        dateLabels.forEach(label => {
+            label.addEventListener('click', (e) => {
+                const dateStr = e.currentTarget.getAttribute('data-date');
+                this.showDailyStats(dateStr);
+            });
+        });
+    }
+
+    // 显示指定日期的统计信息
+    showDailyStats(dateStr) {
+        const date = new Date(dateStr);
+        const timeSlots = this.getDailyData(date);
+        
+        // 计算统计数据
+        const stats = this.calculateDailyStats(timeSlots);
+        
+        // 显示统计弹窗
+        this.displayStatsModal(dateStr, stats);
+    }
+
+    // 计算当日统计数据
+    calculateDailyStats(timeSlots) {
+        const stats = {
+            totalTime: 0,
+            activities: {},
+            timeSlots: timeSlots || []
+        };
+
+        // 计算各活动的总时间
+        timeSlots.forEach(slot => {
+            const duration = (slot.endHour - slot.startHour) * 60; // 转换为分钟
+            stats.totalTime += duration;
+            
+            if (!stats.activities[slot.activity]) {
+                stats.activities[slot.activity] = {
+                    name: slot.activityName || this.getActivityName(slot.activity),
+                    duration: 0,
+                    percentage: 0
+                };
+            }
+            stats.activities[slot.activity].duration += duration;
+        });
+
+        // 计算百分比
+        Object.keys(stats.activities).forEach(activity => {
+            stats.activities[activity].percentage = 
+                stats.totalTime > 0 ? (stats.activities[activity].duration / stats.totalTime * 100).toFixed(1) : 0;
+        });
+
+        return stats;
+    }
+
+    // 显示统计弹窗
+    displayStatsModal(dateStr, stats) {
+        // 移除已存在的弹窗
+        const existingModal = document.getElementById('dailyStatsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const date = new Date(dateStr);
+        const formattedDate = `${date.getMonth() + 1}月${date.getDate()}日 (${date.toLocaleDateString('zh-CN', { weekday: 'long' })})`;
+        
+        // 创建弹窗HTML
+        const modalHtml = `
+            <div id="dailyStatsModal" class="stats-modal">
+                <div class="stats-modal-content">
+                    <div class="stats-modal-header">
+                        <h3>${formattedDate} 统计</h3>
+                        <button class="stats-modal-close">&times;</button>
+                    </div>
+                    <div class="stats-modal-body">
+                        <div class="stats-summary">
+                            <div class="total-time">
+                                <span class="label">总时间:</span>
+                                <span class="value">${this.formatDuration(stats.totalTime * 60 * 1000)}</span>
+                            </div>
+                        </div>
+                        <div class="stats-activities">
+                            ${Object.keys(stats.activities).length > 0 ? 
+                                Object.keys(stats.activities).map(activity => `
+                                    <div class="activity-stat">
+                                        <div class="activity-info">
+                                            <span class="activity-name ${activity}" style="background-color: var(--${activity}-color, #ccc);">${stats.activities[activity].name}</span>
+                                            <span class="activity-percentage">${stats.activities[activity].percentage}%</span>
+                                        </div>
+                                        <div class="activity-duration">${this.formatDuration(stats.activities[activity].duration * 60 * 1000)}</div>
+                                        <div class="activity-bar">
+                                            <div class="activity-bar-fill ${activity}" style="width: ${stats.activities[activity].percentage}%"></div>
+                                        </div>
+                                    </div>
+                                `).join('') : 
+                                '<div class="no-data">当日无活动记录</div>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 添加到页面
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // 绑定关闭事件
+        const modal = document.getElementById('dailyStatsModal');
+        const closeBtn = modal.querySelector('.stats-modal-close');
+        
+        closeBtn.addEventListener('click', () => {
+            modal.remove();
+        });
+
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+
+        // ESC键关闭
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', escHandler);
+            }
+        });
     }
 }
 

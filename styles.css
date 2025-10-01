@@ -609,6 +609,189 @@ body {
     font-size: 1.1rem;
 }
 
+/* 可点击日期样式 */
+.clickable-date {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+.clickable-date:hover {
+    background-color: rgba(74, 144, 226, 0.1);
+    transform: translateY(-1px);
+}
+
+.clickable-date:active {
+    transform: translateY(0);
+}
+
+/* 统计弹窗样式 */
+.stats-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease;
+}
+
+.stats-modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: slideIn 0.3s ease;
+}
+
+.stats-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #eee;
+}
+
+.stats-modal-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.stats-modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #999;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.stats-modal-close:hover {
+    background-color: #f5f5f5;
+    color: #666;
+}
+
+.stats-modal-body {
+    padding: 20px 24px 24px;
+}
+
+.stats-summary {
+    margin-bottom: 20px;
+    padding: 16px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+.total-time {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.total-time .label {
+    font-weight: 500;
+    color: #666;
+}
+
+.total-time .value {
+    font-weight: 600;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.stats-activities {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.activity-stat {
+    padding: 16px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    background-color: #fff;
+}
+
+.activity-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.activity-name {
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: white;
+}
+
+.activity-percentage {
+    font-weight: 600;
+    color: #666;
+}
+
+.activity-duration {
+    font-size: 0.9rem;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+.activity-bar {
+    width: 100%;
+    height: 6px;
+    background-color: #eee;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.activity-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.no-data {
+    text-align: center;
+    color: #999;
+    padding: 40px 20px;
+    font-style: italic;
+}
+
+/* 弹窗动画 */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { 
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     .container {
@@ -644,6 +827,16 @@ body {
     .calendar-day {
         min-height: 50px;
         font-size: 0.9rem;
+    }
+    
+    .stats-modal-content {
+        width: 95%;
+        margin: 20px;
+    }
+    
+    .stats-modal-header,
+    .stats-modal-body {
+        padding: 16px;
     }
 }
 
@@ -748,10 +941,11 @@ body {
 
 .y-axis-labels {
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     justify-content: space-between;
     height: 280px;
     margin-right: 10px;
+    transform: translateY(-0.4em); /* 向上偏移，与网格线对齐 */
 }
 
 .y-label {
