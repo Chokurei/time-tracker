@@ -3,8 +3,10 @@ async function initializeFirebase() {
     try {
         // 动态导入Firebase模块
         const { initializeApp, getApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
-        const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-        const { getFirestore } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const authModule = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+        const firestoreModule = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const { getAuth } = authModule;
+        const { getFirestore } = firestoreModule;
 
         // Firebase配置 - 请替换为您的Firebase项目配置
         // 获取配置步骤：
@@ -85,9 +87,29 @@ async function initializeFirebase() {
         window.app = app;
         window.auth = getAuth(app);
         window.db = getFirestore(app);
-        
-        await connectAuthEmulator(window.auth, 'http://localhost:9099');
-        connectFirestoreEmulator(window.db, 'localhost', 8080);
+
+        // 可选连接本地模拟器：仅当 URL 参数显式开启
+        try {
+            const isLocalHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+            const params = new URLSearchParams(location.search);
+            const enableEmulator = isLocalHost && (
+                params.get('useEmulator') === '1' || localStorage.getItem('firebaseUseEmulator') === '1'
+            );
+            if (enableEmulator) {
+                if (typeof authModule.connectAuthEmulator === 'function') {
+                    authModule.connectAuthEmulator(window.auth, 'http://localhost:9099');
+                    console.log('✅ 已连接 Auth 模拟器');
+                }
+                if (typeof firestoreModule.connectFirestoreEmulator === 'function') {
+                    firestoreModule.connectFirestoreEmulator(window.db, 'localhost', 8080);
+                    console.log('✅ 已连接 Firestore 模拟器');
+                }
+            } else {
+                console.log('ℹ️ 跳过连接 Firebase 模拟器（可用 ?useEmulator=1 开启）');
+            }
+        } catch (e) {
+            console.warn('连接Firebase模拟器失败（可忽略）:', e);
+        }
         
         const firebaseInitialized = new CustomEvent('firebaseInitialized', {
             detail: { 

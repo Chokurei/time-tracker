@@ -498,6 +498,8 @@ class TimeTracker {
             
             const recordsRef = collection(window.db, 'timeRecords');
             const docRef = await addDoc(recordsRef, recordData);
+            // 将云端生成的ID写回本地记录，避免后续同步时出现重复
+            record.id = docRef.id;
             console.log('记录已保存到云端，文档ID:', docRef.id);
         } catch (error) {
             console.error('保存记录到云端失败:', error);
@@ -511,13 +513,28 @@ class TimeTracker {
             const key = this.currentUser ? `timeTrackerRecords_${this.currentUser.uid}` : 'timeTrackerRecords';
             const saved = localStorage.getItem(key);
             const records = saved ? JSON.parse(saved) : [];
-            
-            // 转换日期字符串为Date对象
-            return records.map(record => ({
-                ...record,
-                startTime: new Date(record.startTime),
-                endTime: new Date(record.endTime)
-            }));
+
+            // 转换日期字符串为Date对象并去重
+            const map = new Map();
+            for (const r of records) {
+                const normalized = {
+                    ...r,
+                    startTime: new Date(r.startTime),
+                    endTime: new Date(r.endTime)
+                };
+                const keyStr = normalized.id || `${normalized.activity}|${normalized.startTime.getTime()}|${normalized.endTime.getTime()}`;
+                const existing = map.get(keyStr);
+                if (!existing) {
+                    map.set(keyStr, normalized);
+                } else {
+                    const preferCloud = !!normalized.id && !existing.id;
+                    const preferNewer = normalized.endTime > existing.endTime;
+                    if (preferCloud || preferNewer) {
+                        map.set(keyStr, normalized);
+                    }
+                }
+            }
+            return Array.from(map.values());
         } catch (e) {
             console.error('加载本地记录失败:', e);
             return [];
@@ -722,11 +739,40 @@ class TimeTracker {
         });
     }
 
+    // 去重当天记录（按活动名 + 分钟粒度的开始/结束时间，优先保留有ID/较长/较新的记录）
+    dedupeDayRecords(records) {
+        const map = new Map();
+        const roundToMinute = (t) => {
+            const d = t instanceof Date ? new Date(t) : new Date(t);
+            d.setSeconds(0, 0);
+            return d.getTime();
+        };
+        for (const r of records) {
+            if (!r || !r.startTime || !r.endTime) continue;
+            const startMs = roundToMinute(r.startTime);
+            const endMs = roundToMinute(r.endTime);
+            const key = `${r.activity || ''}|${startMs}|${endMs}`;
+            const existing = map.get(key);
+            if (!existing) {
+                map.set(key, r);
+            } else {
+                const preferCloud = !!r.id && !existing.id;
+                const preferLonger = (r.duration || 0) > (existing.duration || 0);
+                const preferNewerEnd = new Date(r.endTime) > new Date(existing.endTime);
+                if (preferCloud || preferLonger || preferNewerEnd) {
+                    map.set(key, r);
+                }
+            }
+        }
+        return Array.from(map.values()).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+    }
+
     showDayDetails(dateStr) {
-        const dayRecords = this.records.filter(record => {
+        const dayRecordsRaw = this.records.filter(record => {
             // 使用与保存记录时相同的日期格式进行比较
             return record.date === dateStr;
         });
+        const dayRecords = this.dedupeDayRecords(dayRecordsRaw);
         
         if (dayRecords.length === 0) {
             alert('这一天没有记录');
@@ -833,10 +879,11 @@ class TimeTracker {
 
     getDailyData(date) {
         const dateStr = date.toDateString();
-        const dayRecords = this.records.filter(record => {
+        const dayRecordsRaw = this.records.filter(record => {
             // 使用与保存记录时相同的日期格式进行比较
             return record.date === dateStr;
         });
+        const dayRecords = this.dedupeDayRecords(dayRecordsRaw);
 
         // 中文活动名称到英文键值的映射
         const activityMapping = {

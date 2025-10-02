@@ -127,35 +127,38 @@ class SyncManager {
         }
     }
 
-    // 合并记录并去重
+    // 合并记录并去重（按开始/结束时间与活动名作为唯一键，优先保留含ID的记录）
     mergeRecords(localRecords, cloudRecords) {
-        const recordMap = new Map();
-        
-        // 先添加云端记录（优先级更高）
-        cloudRecords.forEach(record => {
-            if (record.id) {
-                recordMap.set(record.id, record);
+        const keyMap = new Map();
+
+        const toTime = (t) => {
+            // 兼容Date、字符串与时间戳数字
+            const d = t instanceof Date ? t : new Date(t);
+            return d.getTime();
+        };
+
+        const makeKey = (record) => `${toTime(record.startTime)}_${toTime(record.endTime)}_${record.activity}`;
+
+        const addRecord = (record) => {
+            const key = makeKey(record);
+            const existing = keyMap.get(key);
+            if (!existing) {
+                keyMap.set(key, record);
             } else {
-                // 对于没有ID的记录，使用时间戳作为键
-                const key = `${record.startTime.getTime()}_${record.endTime.getTime()}_${record.activity}`;
-                recordMap.set(key, record);
-            }
-        });
-        
-        // 再添加本地记录（如果不存在的话）
-        localRecords.forEach(record => {
-            if (record.id && !recordMap.has(record.id)) {
-                recordMap.set(record.id, record);
-            } else if (!record.id) {
-                const key = `${record.startTime.getTime()}_${record.endTime.getTime()}_${record.activity}`;
-                if (!recordMap.has(key)) {
-                    recordMap.set(key, record);
+                // 若存在重复，优先保留有云端ID的记录
+                if (record.id && !existing.id) {
+                    keyMap.set(key, record);
                 }
             }
-        });
-        
-        // 转换为数组并按时间排序
-        return Array.from(recordMap.values()).sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
+        };
+
+        // 云端记录优先加入
+        cloudRecords.forEach(addRecord);
+        // 再加入本地记录（只在键未出现或本地无ID而云端有ID时被覆盖）
+        localRecords.forEach(addRecord);
+
+        return Array.from(keyMap.values())
+            .sort((a, b) => toTime(b.startTime) - toTime(a.startTime));
     }
 
     updateSyncStatus(message) {
