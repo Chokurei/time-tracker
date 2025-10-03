@@ -162,7 +162,8 @@ class TimeTracker {
                 startTime: new Date(this.startTime),
                 endTime: endTime,
                 duration: duration,
-                date: endTime.toDateString()
+                date: endTime.toDateString(),
+                dateKey: this.getDateKey(endTime)
             });
             
             // 清除保存的计时状态
@@ -418,6 +419,8 @@ class TimeTracker {
                     startTime: data.startTime.toDate(),
                     endTime: data.endTime.toDate()
                 };
+                // 统一补充本地日期键
+                record.dateKey = record.dateKey || this.getDateKey(record.endTime || record.startTime);
                 this.records.push(record);
                 console.log('📝 加载记录:', record);
             });
@@ -493,6 +496,7 @@ class TimeTracker {
                 endTime: Timestamp.fromDate(record.endTime),
                 duration: record.duration,
                 date: record.date,
+                dateKey: record.dateKey,
                 createdAt: Timestamp.now()
             };
             
@@ -520,7 +524,8 @@ class TimeTracker {
                 const normalized = {
                     ...r,
                     startTime: new Date(r.startTime),
-                    endTime: new Date(r.endTime)
+                    endTime: new Date(r.endTime),
+                    dateKey: r.dateKey || this.getDateKey(r.endTime || r.startTime)
                 };
                 const keyStr = normalized.id || `${normalized.activity}|${normalized.startTime.getTime()}|${normalized.endTime.getTime()}`;
                 const existing = map.get(keyStr);
@@ -701,9 +706,10 @@ class TimeTracker {
             const isCurrentMonth = currentDate.getMonth() === month;
             const isToday = currentDate.toDateString() === today.toDateString();
             const dateStr = currentDate.toDateString();
+            const dateKey = this.getDateKey(currentDate);
             
             // 获取当天的活动
-            const dayRecords = this.records.filter(record => record.date === dateStr);
+            const dayRecords = this.records.filter(record => (record.dateKey === dateKey) || (record.date === dateStr));
             const hasActivity = dayRecords.length > 0;
             
             let classes = 'calendar-day';
@@ -721,7 +727,7 @@ class TimeTracker {
             }
             
             html += `
-                <div class="${classes}" data-date="${dateStr}">
+                <div class="${classes}" data-date="${dateStr}" data-key="${dateKey}">
                     <div>${currentDate.getDate()}</div>
                     ${indicators}
                 </div>
@@ -768,9 +774,10 @@ class TimeTracker {
     }
 
     showDayDetails(dateStr) {
+        const key = this.getDateKey(new Date(dateStr));
         const dayRecordsRaw = this.records.filter(record => {
-            // 使用与保存记录时相同的日期格式进行比较
-            return record.date === dateStr;
+            // 兼容旧的字符串date与新的本地日期键
+            return (record.dateKey ? record.dateKey === key : record.date === dateStr);
         });
         const dayRecords = this.dedupeDayRecords(dayRecordsRaw);
         
@@ -778,8 +785,8 @@ class TimeTracker {
             alert('这一天没有记录');
             return;
         }
-        
-        let details = `${new Date(dateStr).toLocaleDateString('zh-CN')} 的活动记录:\n\n`;
+        const headerDate = new Date(dateStr);
+        let details = `${headerDate.toLocaleDateString('zh-CN')} 的活动记录:\n\n`;
         
         // 显示详细记录
         dayRecords.forEach(record => {
@@ -877,11 +884,32 @@ class TimeTracker {
         return dates;
     }
 
+    // 本地日期键：YYYY-MM-DD（基于本地时区，避免UTC偏移）
+    getDateKey(date) {
+        const d = date instanceof Date ? date : new Date(date);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    // 解析日期键为本地Date对象
+    parseDateKey(key) {
+        if (!key || typeof key !== 'string') return new Date(key);
+        const parts = key.split('-');
+        if (parts.length !== 3) return new Date(key);
+        const y = Number(parts[0]);
+        const m = Number(parts[1]) - 1;
+        const d = Number(parts[2]);
+        return new Date(y, m, d);
+    }
+
     getDailyData(date) {
         const dateStr = date.toDateString();
+        const key = this.getDateKey(date);
         const dayRecordsRaw = this.records.filter(record => {
-            // 使用与保存记录时相同的日期格式进行比较
-            return record.date === dateStr;
+            // 兼容旧的字符串date与新的本地日期键
+            return (record.dateKey ? record.dateKey === key : record.date === dateStr);
         });
         const dayRecords = this.dedupeDayRecords(dayRecordsRaw);
 
@@ -1008,25 +1036,25 @@ class TimeTracker {
         chartContainer.innerHTML = html;
         
         // 生成X轴日期标签
-        const chartXLabels = document.getElementById('chartXLabels');
-        if (chartXLabels) {
-            let labelsHtml = '';
-            weekDates.forEach(date => {
-                const isToday = date.toDateString() === today.toDateString();
-                const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD格式
-                labelsHtml += `
-                    <div class="x-label ${isToday ? 'today' : ''} clickable-date" data-date="${dateStr}">
-                        <div class="label-day">${date.toLocaleDateString('zh-CN', { weekday: 'short' })}</div>
-                        <div class="label-date">${date.getMonth() + 1}/${date.getDate()}</div>
-                    </div>
-                `;
-            });
-            chartXLabels.innerHTML = labelsHtml;
-            
-            // 为日期标签添加点击事件
-            this.bindDateClickEvents();
+            const chartXLabels = document.getElementById('chartXLabels');
+            if (chartXLabels) {
+                let labelsHtml = '';
+                weekDates.forEach(date => {
+                    const isToday = date.toDateString() === today.toDateString();
+                    const dateStr = this.getDateKey(date); // 使用本地日期键避免UTC偏移
+                    labelsHtml += `
+                        <div class="x-label ${isToday ? 'today' : ''} clickable-date" data-date="${dateStr}">
+                            <div class="label-day">${date.toLocaleDateString('zh-CN', { weekday: 'short' })}</div>
+                            <div class="label-date">${date.getMonth() + 1}/${date.getDate()}</div>
+                        </div>
+                    `;
+                });
+                chartXLabels.innerHTML = labelsHtml;
+                
+                // 为日期标签添加点击事件
+                this.bindDateClickEvents();
+            }
         }
-    }
 
     getActivityName(activityKey) {
         const activityNames = {
@@ -1068,7 +1096,8 @@ class TimeTracker {
 
     // 显示指定日期的统计信息
     showDailyStats(dateStr) {
-        const date = new Date(dateStr);
+        // dateStr 为 YYYY-MM-DD 的本地日期键
+        const date = this.parseDateKey(dateStr);
         const timeSlots = this.getDailyData(date);
         
         // 计算统计数据
@@ -1117,8 +1146,8 @@ class TimeTracker {
         if (existingModal) {
             existingModal.remove();
         }
-
-        const date = new Date(dateStr);
+        // 兼容传入的本地日期键或旧字符串
+        const date = dateStr && dateStr.includes('-') ? this.parseDateKey(dateStr) : new Date(dateStr);
         const formattedDate = `${date.getMonth() + 1}月${date.getDate()}日 (${date.toLocaleDateString('zh-CN', { weekday: 'long' })})`;
         
         // 创建弹窗HTML
