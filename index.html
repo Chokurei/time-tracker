@@ -223,6 +223,28 @@
                     <!-- 记录列表将通过JavaScript动态生成 -->
                 </div>
             </section>
+
+            <!-- 留言区 -->
+            <section class="comments-section">
+                <h2>留言板</h2>
+                <div class="comment-form">
+                    <textarea id="commentInput" placeholder="写下你的留言或反馈..." rows="3"></textarea>
+                    <div class="comment-actions">
+                        <button id="submitComment" class="btn btn-primary">
+                            <i class="fas fa-paper-plane"></i> 发布留言
+                        </button>
+                        <span class="comment-hint">支持举报与删除（仅删除自己留言）</span>
+                    </div>
+                </div>
+                <div class="comments-list" id="commentsList">
+                    <!-- 留言将通过JavaScript动态生成 -->
+                </div>
+                <div class="comments-pagination" id="commentsPagination">
+                    <button class="btn btn-outline" id="commentsPrev"><i class="fas fa-chevron-left"></i> 上一页</button>
+                    <span class="comments-page-info" id="commentsPageInfo">第 1 页</span>
+                    <button class="btn btn-outline" id="commentsNext">下一页 <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </section>
         </main>
     </div>
 

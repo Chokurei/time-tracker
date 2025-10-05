@@ -25,6 +25,17 @@ service cloud.firestore {
       allow read, write: if request.auth != null && 
                         request.auth.uid == userId;
     }
+
+    // 留言集合的安全规则
+    match /comments/{document} {
+      // 允许已认证用户读取和写入自己的留言
+      allow read, write: if request.auth != null && 
+                        request.auth.uid == resource.data.userId;
+
+      // 允许创建：用户ID必须匹配
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId;
+    }
     
     // 默认拒绝所有其他访问
     match /{document=**} {

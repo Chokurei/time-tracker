@@ -8,6 +8,12 @@ class TimeTracker {
         this.currentActivity = null;
         this.timer = null;
         this.records = [];
+        // 评论数据与待同步队列
+        this.comments = [];
+        this.pendingCommentsSync = [];
+        // 评论分页状态
+        this.commentsPage = 1;
+        this.commentsPageSize = 5;
         this.currentMonth = new Date();
         this.currentUser = null;
         this.isOffline = false;
@@ -33,6 +39,8 @@ class TimeTracker {
         this.initializeDailyChart();
         // 不在构造函数中渲染记录，等待用户登录后再渲染
         this.renderEmptyRecords();
+        // 初始渲染空留言区
+        this.renderEmptyComments();
     }
 
 
@@ -53,6 +61,9 @@ class TimeTracker {
         this.renderRecords();
         this.renderCalendar();
         this.renderDailyChart();
+        // 加载并渲染用户留言
+        await this.loadUserComments();
+        this.renderComments();
         console.log('✅ 用户初始化完成');
     }
 
@@ -75,6 +86,14 @@ class TimeTracker {
         this.currentMonthEl = document.getElementById('currentMonth');
         this.prevMonthBtn = document.getElementById('prevMonth');
         this.nextMonthBtn = document.getElementById('nextMonth');
+        // 留言元素
+        this.commentInputEl = document.getElementById('commentInput');
+        this.submitCommentBtn = document.getElementById('submitComment');
+        this.commentsListEl = document.getElementById('commentsList');
+        this.commentsPaginationEl = document.getElementById('commentsPagination');
+        this.commentsPrevEl = document.getElementById('commentsPrev');
+        this.commentsNextEl = document.getElementById('commentsNext');
+        this.commentsPageInfoEl = document.getElementById('commentsPageInfo');
     }
 
     bindEvents() {
@@ -116,6 +135,33 @@ class TimeTracker {
                 }
             }
         });
+        // 留言提交
+        if (this.submitCommentBtn) {
+            this.submitCommentBtn.addEventListener('click', () => this.handleSubmitComment());
+        }
+
+        // 留言分页按钮
+        if (this.commentsPrevEl && this.commentsNextEl) {
+            this.commentsPrevEl.addEventListener('click', () => this.changeCommentsPage(-1));
+            this.commentsNextEl.addEventListener('click', () => this.changeCommentsPage(1));
+        }
+
+        // 留言滑动翻页（触摸手势）
+        if (this.commentsListEl) {
+            let touchStartX = 0;
+            let touchEndX = 0;
+            this.commentsListEl.addEventListener('touchstart', (e) => {
+                touchStartX = e.changedTouches[0].screenX;
+            });
+            this.commentsListEl.addEventListener('touchend', (e) => {
+                touchEndX = e.changedTouches[0].screenX;
+                const delta = touchEndX - touchStartX;
+                if (Math.abs(delta) > 50) {
+                    // 右滑上一页，左滑下一页
+                    this.changeCommentsPage(delta > 0 ? -1 : 1);
+                }
+            });
+        }
     }
 
     start() {
@@ -637,6 +683,12 @@ class TimeTracker {
         this.recordsListEl.innerHTML = '<div class="record-item"><div class="record-info">请先登录以查看记录</div></div>';
     }
 
+    renderEmptyComments() {
+        if (this.commentsListEl) {
+            this.commentsListEl.innerHTML = '<div class="comment-item"><div class="comment-content">暂无留言，快来发布你的想法吧！</div></div>';
+        }
+    }
+
     renderRecords() {
         console.log('🎨 开始渲染记录，总数:', this.records.length);
         const recordsList = document.getElementById('recordsList');
@@ -673,6 +725,326 @@ class TimeTracker {
         
         recordsList.innerHTML = html;
         console.log('✅ 记录渲染完成');
+    }
+
+    // 渲染留言列表
+    renderComments() {
+        if (!this.commentsListEl) return;
+
+        if (!this.comments || this.comments.length === 0) {
+            this.renderEmptyComments();
+            return;
+        }
+
+        const isOwner = (comment) => {
+            return this.currentUser && comment.userId === this.currentUser.uid;
+        };
+
+        // 排序后做分页切片
+        const sorted = this.comments
+            .slice()
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const totalPages = Math.max(1, Math.ceil(sorted.length / this.commentsPageSize));
+        if (this.commentsPage > totalPages) this.commentsPage = totalPages;
+        if (this.commentsPage < 1) this.commentsPage = 1;
+        const startIdx = (this.commentsPage - 1) * this.commentsPageSize;
+        const pageItems = sorted.slice(startIdx, startIdx + this.commentsPageSize);
+
+        const html = pageItems
+            .map(comment => {
+                const created = new Date(comment.createdAt);
+                const metaStr = `${created.toLocaleDateString('zh-CN')} ${created.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+                return `
+                <div class="comment-item" data-id="${comment.id || ''}">
+                    <div class="comment-header">
+                        <span class="comment-author">${comment.author || '用户'}</span>
+                        <span class="comment-meta">${metaStr}${comment.reported ? ' · 已报错' : ''}</span>
+                    </div>
+                    <div class="comment-content">${this.escapeHtml(comment.content)}</div>
+                    <div class="comment-ops">
+                        <button class="btn btn-secondary" data-action="report" data-id="${comment.id || ''}"><i class="fas fa-flag"></i> 报错</button>
+                        ${isOwner(comment) ? `<button class="btn btn-danger" data-action="delete" data-id="${comment.id || ''}"><i class="fas fa-trash"></i> 删除</button>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+
+        this.commentsListEl.innerHTML = html;
+
+        // 更新分页状态与按钮禁用
+        if (this.commentsPageInfoEl) {
+            this.commentsPageInfoEl.textContent = `第 ${this.commentsPage} 页 / 共 ${totalPages} 页`;
+        }
+        if (this.commentsPrevEl) {
+            this.commentsPrevEl.disabled = this.commentsPage <= 1;
+        }
+        if (this.commentsNextEl) {
+            this.commentsNextEl.disabled = this.commentsPage >= totalPages;
+        }
+
+        // 绑定操作按钮事件
+        this.commentsListEl.querySelectorAll('[data-action="delete"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.getAttribute('data-id');
+                this.deleteCommentById(id);
+            });
+        });
+        this.commentsListEl.querySelectorAll('[data-action="report"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.getAttribute('data-id');
+                this.reportCommentById(id);
+            });
+        });
+    }
+
+    // 切换评论分页
+    changeCommentsPage(delta) {
+        this.commentsPage += delta;
+        if (this.commentsPage < 1) this.commentsPage = 1;
+        // 渲染时会校正到最大页
+        this.renderComments();
+        // 滚动到评论顶部，避免页面占用
+        if (this.commentsListEl) {
+            this.commentsListEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    // 文本转义，避免XSS
+    escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    // 提交留言
+    async handleSubmitComment() {
+        if (!this.commentInputEl) return;
+        const content = (this.commentInputEl.value || '').trim();
+        if (!content) return;
+
+        const now = new Date();
+        const comment = {
+            id: undefined,
+            userId: this.currentUser ? this.currentUser.uid : 'guest',
+            author: this.currentUser && this.currentUser.email ? this.currentUser.email : '游客',
+            content,
+            createdAt: now,
+            reported: false
+        };
+
+        // 加入本地列表并保存
+        this.comments.push(comment);
+        this.saveLocalComments();
+
+        // 云端保存
+        try {
+            if (window.authManager && window.authManager.isGuest()) {
+                // 游客模式：仅本地
+                console.log('游客模式，留言仅保存在本地');
+            } else if (window.db && this.currentUser) {
+                await this.saveCommentToCloud(comment);
+            } else {
+                // Firestore不可用，加入待同步
+                this.pendingCommentsSync.push(comment);
+                console.warn('Firestore未初始化，留言加入待同步队列');
+            }
+        } catch (error) {
+            console.error('保存留言到云端失败，加入待同步:', error);
+            this.pendingCommentsSync.push(comment);
+        }
+
+        // 清空输入并刷新显示
+        this.commentInputEl.value = '';
+        this.renderComments();
+    }
+
+    // 删除留言
+    async deleteCommentById(id) {
+        if (!id) {
+            // 本地未同步的留言（无ID），根据内容和时间匹配删除
+            console.warn('尝试删除本地未同步留言');
+        }
+
+        const idx = this.comments.findIndex(c => (c.id && id ? c.id === id : false));
+        let comment;
+        if (idx >= 0) {
+            comment = this.comments[idx];
+        } else {
+            // Fallback: 找不到ID，忽略
+            console.warn('留言未找到或无ID');
+            return;
+        }
+
+        // 权限：仅作者可删除
+        if (!this.currentUser || comment.userId !== this.currentUser.uid) {
+            alert('只能删除自己的留言');
+            return;
+        }
+
+        // 云端删除
+        try {
+            if (window.db && comment.id) {
+                const { doc, deleteDoc, collection } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                const commentsRef = collection(window.db, 'comments');
+                const target = doc(commentsRef, comment.id);
+                await deleteDoc(target);
+            }
+        } catch (error) {
+            console.error('云端删除留言失败:', error);
+        }
+
+        // 本地删除并保存
+        this.comments.splice(idx, 1);
+        this.saveLocalComments();
+        this.renderComments();
+    }
+
+    // 标记留言为报错
+    async reportCommentById(id) {
+        const idx = this.comments.findIndex(c => c.id === id);
+        if (idx < 0) return;
+        const comment = this.comments[idx];
+        if (comment.reported) return;
+        comment.reported = true;
+
+        // 云端更新
+        try {
+            if (window.db && id) {
+                const { doc, updateDoc, collection } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                const commentsRef = collection(window.db, 'comments');
+                const target = doc(commentsRef, id);
+                await updateDoc(target, { reported: true });
+            }
+        } catch (error) {
+            console.error('云端更新留言失败:', error);
+        }
+
+        this.saveLocalComments();
+        this.renderComments();
+    }
+
+    // 加载用户留言（优先云端，失败回退本地）
+    async loadUserComments() {
+        this.comments = [];
+        try {
+            if (window.authManager && window.authManager.isGuest()) {
+                this.comments = this.loadLocalComments();
+                return;
+            }
+
+            if (!window.db || !this.currentUser) {
+                this.comments = this.loadLocalComments();
+                return;
+            }
+
+            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const commentsRef = collection(window.db, 'comments');
+            const q = query(
+                commentsRef,
+                where('userId', '==', this.currentUser.uid),
+                orderBy('createdAt', 'desc')
+            );
+            const snapshot = await getDocs(q);
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                this.comments.push({
+                    id: docSnap.id,
+                    userId: data.userId,
+                    author: data.author,
+                    content: data.content,
+                    createdAt: data.createdAt && typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : new Date(data.createdAt),
+                    reported: !!data.reported
+                });
+            });
+
+            // 保存本地备份
+            this.saveLocalComments();
+        } catch (error) {
+            console.error('加载云端留言失败，使用本地备份:', error);
+            this.comments = this.loadLocalComments();
+        }
+    }
+
+    // 保存单条留言到云端
+    async saveCommentToCloud(comment) {
+        if (!window.db || !this.currentUser) return;
+        const { collection, addDoc, Timestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const commentsRef = collection(window.db, 'comments');
+        const payload = {
+            userId: this.currentUser.uid,
+            author: this.currentUser.email || '',
+            content: comment.content,
+            createdAt: Timestamp.fromDate(comment.createdAt || new Date()),
+            reported: !!comment.reported
+        };
+        const docRef = await addDoc(commentsRef, payload);
+        comment.id = docRef.id;
+        console.log('留言已保存到云端，ID:', docRef.id);
+    }
+
+    // 本地存储：根据用户隔离
+    getLocalCommentsKey() {
+        const uid = (this.currentUser && this.currentUser.uid) ? this.currentUser.uid : 'guest';
+        return `timeTrackerComments_${uid}`;
+    }
+
+    saveLocalComments() {
+        try {
+            const key = this.getLocalCommentsKey();
+            const payload = this.comments.map(c => ({
+                id: c.id,
+                userId: c.userId,
+                author: c.author,
+                content: c.content,
+                createdAt: new Date(c.createdAt).toISOString(),
+                reported: !!c.reported
+            }));
+            localStorage.setItem(key, JSON.stringify(payload));
+        } catch (e) {
+            console.warn('保存本地留言失败:', e);
+        }
+    }
+
+    loadLocalComments() {
+        try {
+            const key = this.getLocalCommentsKey();
+            const raw = localStorage.getItem(key);
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            return arr.map(c => ({
+                id: c.id,
+                userId: c.userId,
+                author: c.author,
+                content: c.content,
+                createdAt: new Date(c.createdAt),
+                reported: !!c.reported
+            }));
+        } catch (e) {
+            console.warn('加载本地留言失败:', e);
+            return [];
+        }
+    }
+
+    // 同步待处理的留言
+    async syncPendingComments() {
+        if (!window.db || !this.currentUser || this.pendingCommentsSync.length === 0) return;
+        const pending = [...this.pendingCommentsSync];
+        for (const c of pending) {
+            try {
+                await this.saveCommentToCloud(c);
+                // 从队列移除
+                this.pendingCommentsSync = this.pendingCommentsSync.filter(x => x !== c);
+            } catch (error) {
+                console.error('同步留言失败，保留在队列中:', error);
+            }
+        }
+        // 同步完成后保存本地备份
+        this.saveLocalComments();
+        // 刷新显示
+        this.renderComments();
     }
 
     renderCalendar() {

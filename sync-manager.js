@@ -58,9 +58,12 @@ class SyncManager {
         try {
             // 同步待处理的记录
             await window.timeTracker.syncPendingRecords();
+            // 同步待处理的留言
+            await window.timeTracker.syncPendingComments();
             
             // 从云端拉取最新数据
             await this.pullLatestData();
+            await this.pullLatestComments();
             
             this.lastSyncTime = new Date();
             this.updateSyncStatus('同步完成');
@@ -124,6 +127,56 @@ class SyncManager {
 
         } catch (error) {
             console.error('❌ 拉取最新数据失败:', error);
+        }
+    }
+
+    // 拉取最新留言
+    async pullLatestComments() {
+        if (!window.timeTracker || !window.timeTracker.currentUser) return;
+
+        try {
+            if (!window.db) {
+                console.warn('Firestore未初始化，跳过云端留言同步');
+                return;
+            }
+
+            const { collection, query, where, getDocs, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const commentsRef = collection(window.db, 'comments');
+            const q = query(
+                commentsRef,
+                where('userId', '==', window.timeTracker.currentUser.uid),
+                orderBy('createdAt', 'desc')
+            );
+
+            const querySnapshot = await getDocs(q);
+            const cloudComments = [];
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                cloudComments.push({
+                    id: doc.id,
+                    userId: data.userId,
+                    author: data.author,
+                    content: data.content,
+                    createdAt: data.createdAt && typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : new Date(data.createdAt),
+                    reported: !!data.reported
+                });
+            });
+
+            // 合并云端与本地（按ID优先）
+            const map = new Map();
+            cloudComments.forEach(c => map.set(c.id, c));
+            window.timeTracker.comments.forEach(c => {
+                if (c.id && !map.has(c.id)) {
+                    map.set(c.id, c);
+                }
+            });
+            window.timeTracker.comments = Array.from(map.values());
+            window.timeTracker.saveLocalComments();
+            window.timeTracker.renderComments();
+
+        } catch (error) {
+            console.error('❌ 拉取最新留言失败:', error);
         }
     }
 
