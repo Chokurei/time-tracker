@@ -744,6 +744,8 @@ class TimeTracker {
         const sorted = this.comments
             .slice()
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        // 兜底：每页条数必须为正数
+        if (!this.commentsPageSize || this.commentsPageSize <= 0) this.commentsPageSize = 5;
         const totalPages = Math.max(1, Math.ceil(sorted.length / this.commentsPageSize));
         if (this.commentsPage > totalPages) this.commentsPage = totalPages;
         if (this.commentsPage < 1) this.commentsPage = 1;
@@ -780,6 +782,10 @@ class TimeTracker {
         if (this.commentsNextEl) {
             this.commentsNextEl.disabled = this.commentsPage >= totalPages;
         }
+        // 单页时隐藏分页控件
+        if (this.commentsPaginationEl) {
+            this.commentsPaginationEl.style.display = totalPages > 1 ? 'flex' : 'none';
+        }
 
         // 绑定操作按钮事件
         this.commentsListEl.querySelectorAll('[data-action="delete"]').forEach(btn => {
@@ -798,9 +804,15 @@ class TimeTracker {
 
     // 切换评论分页
     changeCommentsPage(delta) {
-        this.commentsPage += delta;
-        if (this.commentsPage < 1) this.commentsPage = 1;
-        // 渲染时会校正到最大页
+        // 计算总页数，进行严格边界校正
+        const length = Array.isArray(this.comments) ? this.comments.length : 0;
+        const pageSize = (!this.commentsPageSize || this.commentsPageSize <= 0) ? 5 : this.commentsPageSize;
+        const totalPages = Math.max(1, Math.ceil(length / pageSize));
+        let nextPage = this.commentsPage + delta;
+        if (nextPage < 1) nextPage = 1;
+        if (nextPage > totalPages) nextPage = totalPages;
+        this.commentsPage = nextPage;
+        // 渲染
         this.renderComments();
         // 滚动到评论顶部，避免页面占用
         if (this.commentsListEl) {
@@ -856,6 +868,8 @@ class TimeTracker {
             this.pendingCommentsSync.push(comment);
         }
 
+        // 重置到第1页以显示最新留言
+        this.commentsPage = 1;
         // 清空输入并刷新显示
         this.commentInputEl.value = '';
         this.renderComments();
@@ -962,9 +976,13 @@ class TimeTracker {
 
             // 保存本地备份
             this.saveLocalComments();
+            // 加载完成后展示第1页（最新）
+            this.commentsPage = 1;
         } catch (error) {
             console.error('加载云端留言失败，使用本地备份:', error);
             this.comments = this.loadLocalComments();
+            // 回退后也展示第1页
+            this.commentsPage = 1;
         }
     }
 
