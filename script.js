@@ -757,15 +757,15 @@ class TimeTracker {
                 const created = new Date(comment.createdAt);
                 const metaStr = `${created.toLocaleDateString('zh-CN')} ${created.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
                 return `
-                <div class="comment-item" data-id="${comment.id || ''}">
+                <div class="comment-item" data-id="${comment.id || ''}" data-local-id="${comment.localId || ''}">
                     <div class="comment-header">
                         <span class="comment-author">${comment.author || '用户'}</span>
                         <span class="comment-meta">${metaStr}${comment.reported ? ' · 已报错' : ''}</span>
                     </div>
-                    <div class="comment-content">${this.escapeHtml(comment.content)}</div>
+                    <div class="comment-content" contenteditable="false">${this.escapeHtml(comment.content)}</div>
                     <div class="comment-ops">
-                        <button class="btn btn-secondary" data-action="report" data-id="${comment.id || ''}"><i class="fas fa-flag"></i> 报错</button>
-                        ${isOwner(comment) ? `<button class="btn btn-danger" data-action="delete" data-id="${comment.id || ''}"><i class="fas fa-trash"></i> 删除</button>` : ''}
+                        <button class="btn btn-secondary" data-action="report" data-id="${comment.id || ''}" data-local-id="${comment.localId || ''}"><i class="fas fa-flag"></i> 报错</button>
+                        ${isOwner(comment) ? `<button class=\"btn btn-danger\" data-action=\"delete\" data-id=\"${comment.id || ''}\" data-local-id=\"${comment.localId || ''}\"><i class=\"fas fa-trash\"></i> 删除</button>` : ''}
                     </div>
                 </div>`;
             }).join('');
@@ -791,13 +791,15 @@ class TimeTracker {
         this.commentsListEl.querySelectorAll('[data-action="delete"]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const id = e.currentTarget.getAttribute('data-id');
-                this.deleteCommentById(id);
+                const localId = e.currentTarget.getAttribute('data-local-id');
+                this.deleteCommentById(id, localId);
             });
         });
         this.commentsListEl.querySelectorAll('[data-action="report"]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const id = e.currentTarget.getAttribute('data-id');
-                this.reportCommentById(id);
+                const localId = e.currentTarget.getAttribute('data-local-id');
+                this.reportCommentById(id, localId);
             });
         });
     }
@@ -838,8 +840,10 @@ class TimeTracker {
         if (!content) return;
 
         const now = new Date();
+        const localId = `loc_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
         const comment = {
             id: undefined,
+            localId,
             userId: this.currentUser ? this.currentUser.uid : 'guest',
             author: this.currentUser && this.currentUser.email ? this.currentUser.email : '游客',
             content,
@@ -876,13 +880,12 @@ class TimeTracker {
     }
 
     // 删除留言
-    async deleteCommentById(id) {
-        if (!id) {
-            // 本地未同步的留言（无ID），根据内容和时间匹配删除
-            console.warn('尝试删除本地未同步留言');
+    async deleteCommentById(id, localId) {
+        if (!id && !localId) {
+            console.warn('删除失败：未提供ID或本地ID');
         }
 
-        const idx = this.comments.findIndex(c => (c.id && id ? c.id === id : false));
+        const idx = this.comments.findIndex(c => (id && c.id === id) || (localId && c.localId === localId));
         let comment;
         if (idx >= 0) {
             comment = this.comments[idx];
@@ -892,8 +895,10 @@ class TimeTracker {
             return;
         }
 
-        // 权限：仅作者可删除
-        if (!this.currentUser || comment.userId !== this.currentUser.uid) {
+        // 权限：仅作者可删除；游客允许删除自己(guest)的留言
+        const isGuest = (window.authManager && typeof window.authManager.isGuest === 'function') ? window.authManager.isGuest() : !this.currentUser;
+        const ownsComment = this.currentUser ? (comment.userId === this.currentUser.uid) : (isGuest && comment.userId === 'guest');
+        if (!ownsComment) {
             alert('只能删除自己的留言');
             return;
         }
@@ -917,8 +922,8 @@ class TimeTracker {
     }
 
     // 标记留言为报错
-    async reportCommentById(id) {
-        const idx = this.comments.findIndex(c => c.id === id);
+    async reportCommentById(id, localId) {
+        const idx = this.comments.findIndex(c => (id && c.id === id) || (localId && c.localId === localId));
         if (idx < 0) return;
         const comment = this.comments[idx];
         if (comment.reported) return;
@@ -946,11 +951,18 @@ class TimeTracker {
         try {
             if (window.authManager && window.authManager.isGuest()) {
                 this.comments = this.loadLocalComments();
+                // 兼容旧数据：补齐本地ID
+                this.comments.forEach(c => { if (!c.localId) c.localId = `loc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; });
+                this.saveLocalComments();
+                this.commentsPage = 1;
                 return;
             }
 
             if (!window.db || !this.currentUser) {
                 this.comments = this.loadLocalComments();
+                this.comments.forEach(c => { if (!c.localId) c.localId = `loc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; });
+                this.saveLocalComments();
+                this.commentsPage = 1;
                 return;
             }
 
@@ -966,6 +978,7 @@ class TimeTracker {
                 const data = docSnap.data();
                 this.comments.push({
                     id: docSnap.id,
+                    localId: docSnap.id,
                     userId: data.userId,
                     author: data.author,
                     content: data.content,
@@ -981,6 +994,8 @@ class TimeTracker {
         } catch (error) {
             console.error('加载云端留言失败，使用本地备份:', error);
             this.comments = this.loadLocalComments();
+            this.comments.forEach(c => { if (!c.localId) c.localId = `loc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; });
+            this.saveLocalComments();
             // 回退后也展示第1页
             this.commentsPage = 1;
         }
@@ -1014,6 +1029,7 @@ class TimeTracker {
             const key = this.getLocalCommentsKey();
             const payload = this.comments.map(c => ({
                 id: c.id,
+                localId: c.localId,
                 userId: c.userId,
                 author: c.author,
                 content: c.content,
@@ -1032,14 +1048,18 @@ class TimeTracker {
             const raw = localStorage.getItem(key);
             if (!raw) return [];
             const arr = JSON.parse(raw);
-            return arr.map(c => ({
+            const comments = arr.map(c => ({
                 id: c.id,
+                localId: c.localId,
                 userId: c.userId,
                 author: c.author,
                 content: c.content,
                 createdAt: new Date(c.createdAt),
                 reported: !!c.reported
             }));
+            // 补齐缺失的本地ID
+            comments.forEach(item => { if (!item.localId) item.localId = `loc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; });
+            return comments;
         } catch (e) {
             console.warn('加载本地留言失败:', e);
             return [];
