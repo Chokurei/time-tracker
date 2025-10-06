@@ -1250,6 +1250,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .comment-item {
@@ -1294,6 +1296,25 @@ body {
 /* 缩小评论操作按钮中的图标尺寸 */
 .comment-ops .btn i {
     font-size: 0.9em;
+}
+
+/* 留言滚动条样式，参考最近记录 */
+.comments-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.comments-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
 }
 
 /* 留言分页样式 */

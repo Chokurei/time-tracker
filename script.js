@@ -13,7 +13,7 @@ class TimeTracker {
         this.pendingCommentsSync = [];
         // 评论分页状态
         this.commentsPage = 1;
-        this.commentsPageSize = 5;
+        this.commentsPageSize = 10;
         this.currentMonth = new Date();
         this.currentUser = null;
         this.isOffline = false;
@@ -764,7 +764,7 @@ class TimeTracker {
                     </div>
                     <div class="comment-content" contenteditable="false">${this.escapeHtml(comment.content)}</div>
                     <div class="comment-ops">
-                        <button class="btn btn-secondary" data-action="report" data-id="${comment.id || ''}" data-local-id="${comment.localId || ''}"><i class="fas fa-flag"></i> 报错</button>
+                        ${isOwner(comment) ? `<button class=\"btn btn-secondary\" data-action=\"edit\" data-id=\"${comment.id || ''}\" data-local-id=\"${comment.localId || ''}\"><i class=\"fas fa-edit\"></i> 修改</button>` : ''}
                         ${isOwner(comment) ? `<button class=\"btn btn-danger\" data-action=\"delete\" data-id=\"${comment.id || ''}\" data-local-id=\"${comment.localId || ''}\"><i class=\"fas fa-trash\"></i> 删除</button>` : ''}
                     </div>
                 </div>`;
@@ -795,11 +795,69 @@ class TimeTracker {
                 this.deleteCommentById(id, localId);
             });
         });
-        this.commentsListEl.querySelectorAll('[data-action="report"]').forEach(btn => {
+        // 编辑按钮：切换到编辑模式
+        this.commentsListEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const id = e.currentTarget.getAttribute('data-id');
-                const localId = e.currentTarget.getAttribute('data-local-id');
-                this.reportCommentById(id, localId);
+                const item = e.currentTarget.closest('.comment-item');
+                const contentEl = item.querySelector('.comment-content');
+                const id = item.getAttribute('data-id');
+                const localId = item.getAttribute('data-local-id');
+                // 开启编辑
+                contentEl.dataset.original = contentEl.textContent;
+                contentEl.setAttribute('contenteditable', 'true');
+                contentEl.focus();
+                // 将按钮改为保存
+                e.currentTarget.innerHTML = '<i class="fas fa-save"></i> 保存';
+                e.currentTarget.setAttribute('data-action', 'save');
+                e.currentTarget.classList.remove('btn-secondary');
+                e.currentTarget.classList.add('btn-primary');
+                // 插入取消按钮
+                let cancelBtn = item.querySelector('[data-action="cancel-edit"]');
+                if (!cancelBtn) {
+                    cancelBtn = document.createElement('button');
+                    cancelBtn.className = 'btn btn-outline';
+                    cancelBtn.setAttribute('data-action', 'cancel-edit');
+                    cancelBtn.innerHTML = '<i class="fas fa-times"></i> 取消';
+                    item.querySelector('.comment-ops').insertBefore(cancelBtn, e.currentTarget.nextSibling);
+                }
+                // 绑定取消
+                cancelBtn.addEventListener('click', () => {
+                    // 恢复原文并退出编辑
+                    const original = contentEl.dataset.original || contentEl.textContent;
+                    contentEl.textContent = original;
+                    contentEl.setAttribute('contenteditable', 'false');
+                    // 恢复编辑按钮
+                    const editBtn = item.querySelector('[data-action="save"]') || item.querySelector('[data-action="edit"]');
+                    if (editBtn) {
+                        editBtn.innerHTML = '<i class="fas fa-edit"></i> 修改';
+                        editBtn.setAttribute('data-action', 'edit');
+                        editBtn.classList.remove('btn-primary');
+                        editBtn.classList.add('btn-secondary');
+                    }
+                    cancelBtn.remove();
+                }, { once: true });
+            });
+        });
+
+        // 保存按钮：提交编辑内容
+        this.commentsListEl.querySelectorAll('[data-action="save"]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const item = e.currentTarget.closest('.comment-item');
+                const contentEl = item.querySelector('.comment-content');
+                const id = item.getAttribute('data-id');
+                const localId = item.getAttribute('data-local-id');
+                const newContent = (contentEl.textContent || '').trim();
+                await this.updateCommentContent(id, localId, newContent);
+                // 退出编辑
+                contentEl.setAttribute('contenteditable', 'false');
+                e.currentTarget.innerHTML = '<i class="fas fa-edit"></i> 修改';
+                e.currentTarget.setAttribute('data-action', 'edit');
+                e.currentTarget.classList.remove('btn-primary');
+                e.currentTarget.classList.add('btn-secondary');
+                const cancelBtn = item.querySelector('[data-action="cancel-edit"]');
+                if (cancelBtn) cancelBtn.remove();
+                // 将显示文本更新为转义后的内容，以防后续渲染
+                contentEl.textContent = newContent;
             });
         });
     }
@@ -943,6 +1001,34 @@ class TimeTracker {
 
         this.saveLocalComments();
         this.renderComments();
+    }
+
+    // 更新留言内容（仅作者可编辑）
+    async updateCommentContent(id, localId, newContent) {
+        if (!newContent && newContent !== '') return;
+        const idx = this.comments.findIndex(c => (id && c.id === id) || (localId && c.localId === localId));
+        if (idx < 0) return;
+        const comment = this.comments[idx];
+        // 权限：仅作者可修改；游客允许修改自己(guest)的留言
+        const isGuest = (window.authManager && typeof window.authManager.isGuest === 'function') ? window.authManager.isGuest() : !this.currentUser;
+        const ownsComment = this.currentUser ? (comment.userId === this.currentUser.uid) : (isGuest && comment.userId === 'guest');
+        if (!ownsComment) {
+            alert('只能修改自己的留言');
+            return;
+        }
+        comment.content = newContent;
+        // 云端更新
+        try {
+            if (window.db && comment.id) {
+                const { doc, updateDoc, collection } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                const commentsRef = collection(window.db, 'comments');
+                const target = doc(commentsRef, comment.id);
+                await updateDoc(target, { content: newContent });
+            }
+        } catch (error) {
+            console.error('云端更新留言失败:', error);
+        }
+        this.saveLocalComments();
     }
 
     // 加载用户留言（优先云端，失败回退本地）
