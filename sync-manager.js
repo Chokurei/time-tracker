@@ -190,7 +190,7 @@ class SyncManager {
             return d.getTime();
         };
 
-        const makeKey = (record) => `${toTime(record.startTime)}_${toTime(record.endTime)}_${record.activity}`;
+        const makeKey = (record) => record.sessionId || `${toTime(record.startTime)}_${toTime(record.endTime)}_${record.activity}`;
 
         const addRecord = (record) => {
             const key = makeKey(record);

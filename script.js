@@ -8,6 +8,10 @@ class TimeTracker {
         this.currentActivity = null;
         this.timer = null;
         this.records = [];
+        // 停止并发保护与会话标识
+        this.isStopping = false;
+        this.currentSessionId = null;
+        this.lastStopAt = 0;
         // 评论数据与待同步队列
         this.comments = [];
         this.pendingCommentsSync = [];
@@ -174,13 +178,15 @@ class TimeTracker {
             this.startTime = Date.now();
             this.pausedTime = 0;
             this.currentActivity = this.getCurrentActivityName();
+            // 生成本次会话ID用于去重
+            this.currentSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
         }
-        
+
         this.isRunning = true;
         this.updateButtons();
         this.updateCurrentActivity();
         this.startTimer();
-        
+
         // 保存计时状态
         this.saveTimerState();
     }
@@ -198,7 +204,16 @@ class TimeTracker {
     }
 
     async stop() {
-        if (this.isRunning) {
+        // 短时间节流：1.5秒窗口防连击
+        const nowTs = Date.now();
+        if (nowTs - this.lastStopAt < 1500) {
+            return;
+        }
+        this.lastStopAt = nowTs;
+
+        if (this.isRunning && !this.isStopping) {
+            this.isStopping = true;
+            this.updateButtons();
             const endTime = new Date();
             const duration = this.isPaused ? this.pausedTime : endTime.getTime() - this.startTime.getTime();
             
@@ -209,7 +224,8 @@ class TimeTracker {
                 endTime: endTime,
                 duration: duration,
                 date: endTime.toDateString(),
-                dateKey: this.getDateKey(endTime)
+                dateKey: this.getDateKey(endTime),
+                sessionId: this.currentSessionId
             });
             
             // 清除保存的计时状态
@@ -225,6 +241,7 @@ class TimeTracker {
             this.renderTodayStats();
             this.renderRecords();
             this.renderCalendar();
+            this.isStopping = false;
         }
     }
 
@@ -276,7 +293,7 @@ class TimeTracker {
     updateButtons() {
         this.startBtn.disabled = this.isRunning && !this.isPaused;
         this.pauseBtn.disabled = !this.isRunning || this.isPaused;
-        this.stopBtn.disabled = !this.isRunning;
+        this.stopBtn.disabled = !this.isRunning || this.isStopping;
         
         // 更新按钮文本
         if (this.isPaused) {
@@ -348,7 +365,8 @@ class TimeTracker {
             startTime: this.startTime,
             pausedTime: this.pausedTime,
             currentActivity: this.currentActivity,
-            userId: this.currentUser.uid
+            userId: this.currentUser.uid,
+            currentSessionId: this.currentSessionId
         };
         
         const key = `timerState_${this.currentUser.uid}`;
@@ -377,6 +395,7 @@ class TimeTracker {
                 this.isRunning = timerState.isRunning;
                 this.isPaused = timerState.isPaused;
                 this.currentActivity = timerState.currentActivity;
+                this.currentSessionId = timerState.currentSessionId || this.currentSessionId;
                 
                 if (timerState.isPaused) {
                     // 如果是暂停状态，恢复暂停时间
@@ -416,6 +435,14 @@ class TimeTracker {
     }
 
     async saveRecord(record) {
+        // 去重：如果存在相同会话ID且时间相同的记录，则不再加入
+        if (record.sessionId) {
+            const dupIdx = this.records.findIndex(r => r.sessionId === record.sessionId && r.startTime && r.endTime && r.startTime.getTime() === record.startTime.getTime() && r.endTime.getTime() === record.endTime.getTime());
+            if (dupIdx >= 0) {
+                console.warn('检测到重复记录，跳过保存');
+                return;
+            }
+        }
         this.records.push(record);
         await this.saveUserRecords();
         this.renderDailyChart();
@@ -472,7 +499,7 @@ class TimeTracker {
             });
 
             // 客户端排序：按开始时间降序排列
-            this.records.sort((a, b) => b.startTime - a.startTime);
+            this.records.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
 
             console.log(`✅ 从云端加载了 ${this.records.length} 条记录`);
             console.log('📊 排序后的记录数组:', this.records);
@@ -543,6 +570,7 @@ class TimeTracker {
                 duration: record.duration,
                 date: record.date,
                 dateKey: record.dateKey,
+                sessionId: record.sessionId || null,
                 createdAt: Timestamp.now()
             };
             
@@ -573,7 +601,7 @@ class TimeTracker {
                     endTime: new Date(r.endTime),
                     dateKey: r.dateKey || this.getDateKey(r.endTime || r.startTime)
                 };
-                const keyStr = normalized.id || `${normalized.activity}|${normalized.startTime.getTime()}|${normalized.endTime.getTime()}`;
+                const keyStr = normalized.id || normalized.sessionId || `${normalized.activity}|${normalized.startTime.getTime()}|${normalized.endTime.getTime()}`;
                 const existing = map.get(keyStr);
                 if (!existing) {
                     map.set(keyStr, normalized);
@@ -605,6 +633,9 @@ class TimeTracker {
     addToPendingSync() {
         const latestRecord = this.records[this.records.length - 1];
         if (latestRecord && !latestRecord.id) {
+            // 避免重复加入pendingSync：使用sessionId或时间键判重
+            const exists = this.pendingSync.some(r => (latestRecord.sessionId && r.sessionId === latestRecord.sessionId) || (r.startTime && latestRecord.startTime && r.startTime.getTime && latestRecord.startTime.getTime && r.startTime.getTime() === latestRecord.startTime.getTime() && r.endTime && latestRecord.endTime && r.endTime.getTime && latestRecord.endTime.getTime && r.endTime.getTime() === latestRecord.endTime.getTime()));
+            if (exists) return;
             this.pendingSync.push(latestRecord);
         }
     }
@@ -614,7 +645,13 @@ class TimeTracker {
         if (this.pendingSync.length === 0 || !window.db || !this.currentUser) return;
 
         try {
+            // 根据sessionId去重，保证每个会话只上传一次
+            const uniqueMap = new Map();
             for (const record of this.pendingSync) {
+                const key = record.sessionId || `${record.activity}|${new Date(record.startTime).getTime()}|${new Date(record.endTime).getTime()}`;
+                if (!uniqueMap.has(key)) uniqueMap.set(key, record);
+            }
+            for (const record of uniqueMap.values()) {
                 await this.saveRecordToCloud(record);
             }
             this.pendingSync = [];
