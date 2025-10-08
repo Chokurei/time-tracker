@@ -67,6 +67,22 @@ class TimeTracker {
         this.renderDailyChart();
         // 加载并渲染用户留言
         await this.loadUserComments();
+        // 加载待同步留言队列
+        this.pendingCommentsSync = this.loadPendingCommentsQueue();
+        // 扫描无ID留言（表示尚未上云），加入待同步队列（去重）
+        const noIdLocal = (this.comments || []).filter(c => !c.id);
+        const existingLocIds = new Set(this.pendingCommentsSync.map(c => c.localId));
+        noIdLocal.forEach(c => {
+            if (c.localId && !existingLocIds.has(c.localId)) {
+                this.pendingCommentsSync.push(c);
+            }
+        });
+        // 立即尝试同步（若在线且配置可用）
+        try {
+            await this.syncPendingComments();
+        } catch (e) {
+            console.warn('初始化同步待处理留言失败，稍后重试:', e);
+        }
         this.renderComments();
         console.log('✅ 用户初始化完成');
     }
@@ -1160,6 +1176,18 @@ class TimeTracker {
                 reported: !!c.reported
             }));
             localStorage.setItem(key, JSON.stringify(payload));
+            // 同步保存待上传留言队列（仅当前用户作用域）
+            const pendingKey = `${key}_pending`;
+            const pendingPayload = this.pendingCommentsSync.map(c => ({
+                id: c.id,
+                localId: c.localId,
+                userId: c.userId,
+                author: c.author,
+                content: c.content,
+                createdAt: new Date(c.createdAt).toISOString(),
+                reported: !!c.reported
+            }));
+            localStorage.setItem(pendingKey, JSON.stringify(pendingPayload));
         } catch (e) {
             console.warn('保存本地留言失败:', e);
         }
@@ -1189,6 +1217,29 @@ class TimeTracker {
         }
     }
 
+    // 加载待同步留言队列
+    loadPendingCommentsQueue() {
+        try {
+            const pendingKey = `${this.getLocalCommentsKey()}_pending`;
+            const raw = localStorage.getItem(pendingKey);
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            const comments = arr.map(c => ({
+                id: c.id,
+                localId: c.localId,
+                userId: c.userId,
+                author: c.author,
+                content: c.content,
+                createdAt: new Date(c.createdAt),
+                reported: !!c.reported
+            }));
+            return comments;
+        } catch (e) {
+            console.warn('加载待同步留言队列失败:', e);
+            return [];
+        }
+    }
+
     // 同步待处理的留言
     async syncPendingComments() {
         if (!window.db || !this.currentUser || this.pendingCommentsSync.length === 0) return;
@@ -1198,6 +1249,11 @@ class TimeTracker {
                 await this.saveCommentToCloud(c);
                 // 从队列移除
                 this.pendingCommentsSync = this.pendingCommentsSync.filter(x => x !== c);
+                // 将刚上云的本地评论更新ID以便后续拉取合并
+                const idx = this.comments.findIndex(item => item.localId === c.localId);
+                if (idx >= 0) {
+                    this.comments[idx].id = c.id;
+                }
             } catch (error) {
                 console.error('同步留言失败，保留在队列中:', error);
             }
