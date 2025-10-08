@@ -233,12 +233,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    const firebaseInitialized = await initializeFirebase();
-    
-    // 发出Firebase初始化完成事件
-    const event = new CustomEvent('firebaseInitialized', { 
-        detail: { success: firebaseInitialized } 
-    });
-    document.dispatchEvent(event);
-    console.log('🎉 Firebase初始化事件已发出:', firebaseInitialized);
+    // 初始化 Firebase（事件已在 initializeFirebase 内派发一次）
+    try {
+        await initializeFirebase();
+        console.log('🎉 Firebase 初始化执行完成');
+    } catch (e) {
+        console.error('🚨 Firebase 初始化执行失败:', e);
+    }
 });

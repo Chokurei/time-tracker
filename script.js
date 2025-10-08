@@ -977,10 +977,14 @@ class TimeTracker {
                 // Firestore不可用，加入待同步
                 this.pendingCommentsSync.push(comment);
                 console.warn('Firestore未初始化，留言加入待同步队列');
+                // 立即持久化待同步队列
+                this.saveLocalComments();
             }
         } catch (error) {
             console.error('保存留言到云端失败，加入待同步:', error);
             this.pendingCommentsSync.push(comment);
+            // 立即持久化待同步队列
+            this.saveLocalComments();
         }
 
         // 重置到第1页以显示最新留言
