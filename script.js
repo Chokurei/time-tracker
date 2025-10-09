@@ -1242,6 +1242,17 @@ class TimeTracker {
                 });
             });
 
+            // 合并本地未上云的留言，避免丢失
+            const localExisting = this.loadLocalComments();
+            const cloudIds = new Set(this.comments.filter(c => c.id).map(c => c.id));
+            localExisting.forEach(lc => {
+                const hasId = !!lc.id;
+                if (!hasId || !cloudIds.has(lc.id)) {
+                    if (!lc.localId) lc.localId = `loc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+                    this.comments.push(lc);
+                }
+            });
+
             // 保存本地备份
             this.saveLocalComments();
             // 加载完成后展示第1页（最新）
@@ -1294,15 +1305,22 @@ class TimeTracker {
             localStorage.setItem(key, JSON.stringify(payload));
             // 同步保存待上传留言队列（仅当前用户作用域）
             const pendingKey = `${key}_pending`;
-            const pendingPayload = this.pendingCommentsSync.map(c => ({
-                id: c.id,
-                localId: c.localId,
-                userId: c.userId,
-                author: c.author,
-                content: c.content,
-                createdAt: new Date(c.createdAt).toISOString(),
-                reported: !!c.reported
-            }));
+            let pendingPayload;
+            if (Array.isArray(this.pendingCommentsSync) && this.pendingCommentsSync.length > 0) {
+                pendingPayload = this.pendingCommentsSync.map(c => ({
+                    id: c.id,
+                    localId: c.localId,
+                    userId: c.userId,
+                    author: c.author,
+                    content: c.content,
+                    createdAt: new Date(c.createdAt).toISOString(),
+                    reported: !!c.reported
+                }));
+            } else {
+                // 保留已有的待同步队列，避免被意外清空
+                const existingRaw = localStorage.getItem(pendingKey);
+                pendingPayload = existingRaw ? JSON.parse(existingRaw) : [];
+            }
             localStorage.setItem(pendingKey, JSON.stringify(pendingPayload));
         } catch (e) {
             console.warn('保存本地留言失败:', e);
