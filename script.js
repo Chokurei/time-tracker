@@ -22,6 +22,8 @@ class TimeTracker {
         this.currentUser = null;
         this.isOffline = false;
         this.pendingSync = [];
+        // 云端活动会话订阅句柄
+        this.activeTimerUnsubscribe = null;
         
         // 活动类型图标映射
         this.activityIcons = {
@@ -53,6 +55,11 @@ class TimeTracker {
     async initializeForUser(user) {
         console.log('🔄 初始化用户数据:', user);
         this.currentUser = user;
+        // 清理旧订阅
+        if (this.activeTimerUnsubscribe) {
+            try { this.activeTimerUnsubscribe(); } catch (e) {}
+            this.activeTimerUnsubscribe = null;
+        }
         
         // 恢复之前保存的计时状态
         const restored = this.restoreTimerState();
@@ -82,6 +89,12 @@ class TimeTracker {
             await this.syncPendingComments();
         } catch (e) {
             console.warn('初始化同步待处理留言失败，稍后重试:', e);
+        }
+        // 订阅云端活动会话状态以跨设备显示计时
+        try {
+            await this.subscribeActiveTimer();
+        } catch (e) {
+            console.warn('订阅云端活动会话失败:', e);
         }
         this.renderComments();
         console.log('✅ 用户初始化完成');
@@ -205,6 +218,8 @@ class TimeTracker {
 
         // 保存计时状态
         this.saveTimerState();
+        // 云端更新活动会话
+        this.updateActiveTimerCloud().catch(e => console.warn('更新云端计时状态失败:', e));
     }
 
     pause() {
@@ -216,6 +231,8 @@ class TimeTracker {
             
             // 保存计时状态
             this.saveTimerState();
+            // 云端更新活动会话
+            this.updateActiveTimerCloud().catch(e => console.warn('更新云端计时状态失败:', e));
         }
     }
 
@@ -231,7 +248,7 @@ class TimeTracker {
             this.isStopping = true;
             this.updateButtons();
             const endTime = new Date();
-            const duration = this.isPaused ? this.pausedTime : endTime.getTime() - this.startTime.getTime();
+            const duration = this.isPaused ? this.pausedTime : endTime.getTime() - this.startTime;
             
             // 保存记录
             await this.saveRecord({
@@ -246,6 +263,8 @@ class TimeTracker {
             
             // 清除保存的计时状态
             this.clearTimerState();
+            // 云端标记活动会话结束
+            await this.clearActiveTimerCloud().catch(e => console.warn('清理云端计时状态失败:', e));
             
             // 重置状态
             this.reset();
@@ -277,6 +296,8 @@ class TimeTracker {
         
         // 清除保存的计时状态
         this.clearTimerState();
+        // 云端标记活动会话结束（冪等）
+        this.clearActiveTimerCloud().catch(() => {});
     }
 
     startTimer() {
@@ -440,6 +461,97 @@ class TimeTracker {
         }
         
         return false;
+    }
+
+    // 订阅云端活动会话状态以跨设备显示计时
+    async subscribeActiveTimer() {
+        if (!this.currentUser || !window.db) return;
+        const { doc, onSnapshot, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const ref = doc(window.db, 'activeTimers', this.currentUser.uid);
+        // 初始获取一次
+        try {
+            const snap = await getDoc(ref);
+            if (snap.exists()) {
+                this.applyActiveTimerDoc(snap.data());
+            }
+        } catch (e) {
+            console.warn('获取云端计时初始状态失败:', e);
+        }
+        // 订阅变化
+        this.activeTimerUnsubscribe = onSnapshot(ref, (snap) => {
+            if (snap.exists()) {
+                this.applyActiveTimerDoc(snap.data());
+            } else {
+                // 文档不存在，确保本地界面在非运行时不误显示
+                if (!this.isRunning) {
+                    this.isPaused = false;
+                    this.currentActivity = null;
+                    this.pausedTime = 0;
+                    this.updateButtons();
+                    this.updateCurrentActivity();
+                    this.updateDisplay();
+                }
+            }
+        }, (error) => {
+            console.error('订阅云端计时状态失败:', error);
+        });
+    }
+
+    // 根据云端文档应用活动计时状态
+    applyActiveTimerDoc(data) {
+        if (!data) return;
+        // 如果本地没有在运行，采用云端状态
+        if (!this.isRunning) {
+            this.isRunning = !!data.isRunning;
+            this.isPaused = !!data.isPaused;
+            this.currentActivity = data.currentActivity || this.currentActivity;
+            this.currentSessionId = data.currentSessionId || this.currentSessionId;
+            this.startTime = typeof data.startTime === 'number' ? data.startTime : this.startTime;
+            this.pausedTime = typeof data.pausedTime === 'number' ? data.pausedTime : 0;
+            this.updateButtons();
+            this.updateCurrentActivity();
+            this.updateDisplay();
+            if (this.isRunning && !this.isPaused) {
+                this.startTimer();
+            } else {
+                this.stopTimer();
+            }
+        }
+    }
+
+    // 将当前活动计时状态更新到云端
+    async updateActiveTimerCloud() {
+        if (!this.currentUser || !window.db) return;
+        if (window.authManager && window.authManager.isGuest()) return;
+        const { doc, setDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const ref = doc(window.db, 'activeTimers', this.currentUser.uid);
+        const payload = {
+            isRunning: this.isRunning,
+            isPaused: this.isPaused,
+            startTime: this.startTime,
+            pausedTime: this.pausedTime,
+            currentActivity: this.currentActivity,
+            currentSessionId: this.currentSessionId,
+            updatedAt: serverTimestamp()
+        };
+        await setDoc(ref, payload, { merge: true });
+    }
+
+    // 清理云端活动计时状态（标记为结束）
+    async clearActiveTimerCloud() {
+        if (!this.currentUser || !window.db) return;
+        if (window.authManager && window.authManager.isGuest()) return;
+        const { doc, setDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const ref = doc(window.db, 'activeTimers', this.currentUser.uid);
+        const payload = {
+            isRunning: false,
+            isPaused: false,
+            startTime: null,
+            pausedTime: 0,
+            currentActivity: null,
+            endedAt: serverTimestamp()
+        };
+        await setDoc(ref, payload, { merge: true });
     }
 
     // 清除保存的计时状态

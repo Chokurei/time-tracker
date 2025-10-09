@@ -37,6 +37,14 @@ service cloud.firestore {
                    request.auth.uid == request.resource.data.userId;
     }
     
+    // 活动计时状态集合（activeTimers）
+    match /activeTimers/{userId} {
+      // 仅允许用户读取和写入自己的活动计时状态文档
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // 允许创建：文档ID必须与用户ID相同
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
     // 默认拒绝所有其他访问
     match /{document=**} {
       allow read, write: if false;
