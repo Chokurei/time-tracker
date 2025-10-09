@@ -379,7 +379,10 @@ class TimeTracker {
     }
 
     formatDuration(milliseconds) {
-        const seconds = Math.floor(milliseconds / 1000);
+        let ms = Number(milliseconds);
+        if (!isFinite(ms)) ms = 0;
+        if (ms < 0) ms = Math.abs(ms); // 保护性处理负值，防止出现负秒数
+        const seconds = Math.floor(ms / 1000);
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         
@@ -1499,52 +1502,55 @@ class TimeTracker {
     showDayDetails(dateStr) {
         const key = this.getDateKey(new Date(dateStr));
         const dayRecordsRaw = this.records.filter(record => {
-            // 兼容旧的字符串date与新的本地日期键
             return (record.dateKey ? record.dateKey === key : record.date === dateStr);
         });
         const dayRecords = this.dedupeDayRecords(dayRecordsRaw);
-        
+
         if (dayRecords.length === 0) {
             alert('这一天没有记录');
             return;
         }
         const headerDate = new Date(dateStr);
+        const dayStart = new Date(headerDate.getFullYear(), headerDate.getMonth(), headerDate.getDate(), 0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayStart.getDate() + 1);
+
         let details = `${headerDate.toLocaleDateString('zh-CN')} 的活动记录:\n\n`;
-        
-        // 显示详细记录
-        dayRecords.forEach(record => {
-            const startTime = new Date(record.startTime).toLocaleTimeString('zh-CN', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
-            details += `${startTime} - ${record.activity}: ${this.formatDuration(record.duration)}\n`;
-        });
-        
-        // 计算每个活动类型的总时间
+
+        // 显示详细记录（按当天范围裁剪）
         const activityStats = {};
+        let totalTime = 0;
         dayRecords.forEach(record => {
-            if (!activityStats[record.activity]) {
-                activityStats[record.activity] = 0;
-            }
-            activityStats[record.activity] += record.duration;
+            if (!record.startTime || !record.endTime) return;
+            const start = new Date(record.startTime).getTime();
+            const end = new Date(record.endTime).getTime();
+            const clampedStart = Math.max(start, dayStart.getTime());
+            const clampedEnd = Math.min(end, dayEnd.getTime());
+            if (clampedEnd <= clampedStart) return;
+
+            const startStr = new Date(clampedStart).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            const endStr = new Date(clampedEnd).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            const durationMs = clampedEnd - clampedStart;
+            details += `${startStr} - ${endStr} ${record.activity}: ${this.formatDuration(durationMs)}\n`;
+
+            const act = record.activity || '其他';
+            activityStats[act] = (activityStats[act] || 0) + durationMs;
+            totalTime += durationMs;
         });
-        
+
         // 添加统计信息
         details += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         details += '📊 当日活动统计:\n\n';
-        
-        // 按时间长短排序显示
+
         const sortedStats = Object.entries(activityStats)
             .sort(([,a], [,b]) => b - a);
-        
-        let totalTime = 0;
-        sortedStats.forEach(([activity, duration]) => {
-            details += `${activity}: ${this.formatDuration(duration)}\n`;
-            totalTime += duration;
+
+        sortedStats.forEach(([activity, durationMs]) => {
+            details += `${activity}: ${this.formatDuration(durationMs)}\n`;
         });
-        
+
         details += `\n总计: ${this.formatDuration(totalTime)}`;
-        
+
         alert(details);
     }
 
@@ -1631,12 +1637,10 @@ class TimeTracker {
         const dateStr = date.toDateString();
         const key = this.getDateKey(date);
         const dayRecordsRaw = this.records.filter(record => {
-            // 兼容旧的字符串date与新的本地日期键
             return (record.dateKey ? record.dateKey === key : record.date === dateStr);
         });
         const dayRecords = this.dedupeDayRecords(dayRecordsRaw);
 
-        // 中文活动名称到英文键值的映射
         const activityMapping = {
             '工作': 'work',
             '学习': 'study',
@@ -1648,22 +1652,37 @@ class TimeTracker {
             '其他': 'other'
         };
 
-        // 返回时间段数组而不是总时长
         const timeSlots = [];
-        
+
+        // 计算当天的时间边界 [00:00, 24:00)
+        const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayStart.getDate() + 1);
+
         dayRecords.forEach(record => {
             if (record.startTime && record.endTime) {
-                const startTime = new Date(record.startTime);
-                const endTime = new Date(record.endTime);
+                const start = new Date(record.startTime).getTime();
+                const end = new Date(record.endTime).getTime();
                 const activityName = record.activity || '其他';
                 const activityKey = activityMapping[activityName] || 'other';
-                
+
+                // 裁剪到当天范围，避免跨午夜出现负值
+                const clampedStart = Math.max(start, dayStart.getTime());
+                const clampedEnd = Math.min(end, dayEnd.getTime());
+
+                if (clampedEnd <= clampedStart) {
+                    return; // 当天无有效覆盖时段
+                }
+
+                const startHour = (clampedStart - dayStart.getTime()) / (1000 * 60 * 60);
+                const endHour = (clampedEnd - dayStart.getTime()) / (1000 * 60 * 60);
+
                 timeSlots.push({
                     activity: activityKey,
                     activityName: activityName,
-                    startHour: startTime.getHours() + startTime.getMinutes() / 60,
-                    endHour: endTime.getHours() + endTime.getMinutes() / 60,
-                    duration: record.duration || 0
+                    startHour,
+                    endHour,
+                    duration: (clampedEnd - clampedStart) / (1000 * 60) // 分钟
                 });
             }
         });
