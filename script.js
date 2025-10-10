@@ -574,7 +574,12 @@ class TimeTracker {
                 return;
             }
         }
-        this.records.push(record);
+        // 归一化duration，防止负值或非数字污染
+        const normalizedRecord = {
+            ...record,
+            duration: Math.max(Number(record.duration) || 0, 0)
+        };
+        this.records.push(normalizedRecord);
         await this.saveUserRecords();
         this.renderDailyChart();
     }
@@ -621,7 +626,8 @@ class TimeTracker {
                     ...data,
                     id: doc.id,
                     startTime: data.startTime.toDate(),
-                    endTime: data.endTime.toDate()
+                    endTime: data.endTime.toDate(),
+                    duration: Math.max(Number(data.duration) || 0, 0)
                 };
                 // 统一补充本地日期键
                 record.dateKey = record.dateKey || this.getDateKey(record.endTime || record.startTime);
@@ -730,6 +736,7 @@ class TimeTracker {
                     ...r,
                     startTime: new Date(r.startTime),
                     endTime: new Date(r.endTime),
+                    duration: Math.max(Number(r.duration) || 0, 0),
                     dateKey: r.dateKey || this.getDateKey(r.endTime || r.startTime)
                 };
                 const keyStr = normalized.id || normalized.sessionId || `${normalized.activity}|${normalized.startTime.getTime()}|${normalized.endTime.getTime()}`;
@@ -801,11 +808,13 @@ class TimeTracker {
         let totalTime = 0;
         
         todayRecords.forEach(record => {
-            if (!stats[record.type]) {
-                stats[record.type] = 0;
+            const safeDuration = Math.max(Number(record.duration) || 0, 0);
+            const type = record.type || 'other';
+            if (!stats[type]) {
+                stats[type] = 0;
             }
-            stats[record.type] += record.duration;
-            totalTime += record.duration;
+            stats[type] += safeDuration;
+            totalTime += safeDuration;
         });
         
         // 生成统计卡片
@@ -1859,7 +1868,8 @@ class TimeTracker {
 
         // 计算各活动的总时间
         timeSlots.forEach(slot => {
-            const duration = (slot.endHour - slot.startHour) * 60; // 转换为分钟
+            const computed = (slot.endHour - slot.startHour) * 60; // 分钟
+            const duration = Math.max(Number(slot.duration ?? computed) || 0, 0);
             stats.totalTime += duration;
             
             if (!stats.activities[slot.activity]) {
@@ -1904,7 +1914,7 @@ class TimeTracker {
                         <div class="stats-summary">
                             <div class="total-time">
                                 <span class="label">总时间:</span>
-                                <span class="value">${this.formatDuration(stats.totalTime * 60 * 1000)}</span>
+                                <span class="value">${this.formatDuration(Math.max(Number(stats.totalTime) || 0, 0) * 60 * 1000)}</span>
                             </div>
                         </div>
                         <div class="stats-activities">
@@ -1915,7 +1925,7 @@ class TimeTracker {
                                             <span class="activity-name ${activity}" style="background-color: var(--${activity}-color, #ccc);">${stats.activities[activity].name}</span>
                                             <span class="activity-percentage">${stats.activities[activity].percentage}%</span>
                                         </div>
-                                        <div class="activity-duration">${this.formatDuration(stats.activities[activity].duration * 60 * 1000)}</div>
+                                        <div class="activity-duration">${this.formatDuration(Math.max(Number(stats.activities[activity].duration) || 0, 0) * 60 * 1000)}</div>
                                         <div class="activity-bar">
                                             <div class="activity-bar-fill ${activity}" style="width: ${stats.activities[activity].percentage}%"></div>
                                         </div>
