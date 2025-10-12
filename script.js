@@ -248,18 +248,67 @@ class TimeTracker {
             this.isStopping = true;
             this.updateButtons();
             const endTime = new Date();
-            const duration = this.isPaused ? this.pausedTime : endTime.getTime() - this.startTime;
+            const startMs = new Date(this.startTime).getTime();
+            const endMs = endTime.getTime();
+            const duration = this.isPaused ? this.pausedTime : (endMs - startMs);
+
+            // 超长/跨午夜会话保护：在保存前给出确认
+            try {
+                const LONG_SESSION_THRESHOLD_MS = 8 * 60 * 60 * 1000; // 8小时阈值
+                const isCrossMidnight = this.getDateKey(new Date(startMs)) !== this.getDateKey(new Date(endMs));
+                if (duration > LONG_SESSION_THRESHOLD_MS) {
+                    const startStr = new Date(startMs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    const endStr = new Date(endMs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    const msg = `此次会话持续较长，确认保存吗？\n\n开始：${startStr}\n结束：${endStr}\n时长：${this.formatDuration(duration)}${isCrossMidnight ? '\n(将自动拆分保存至各自日期)' : ''}`;
+                    const ok = typeof window.confirm === 'function' ? window.confirm(msg) : true;
+                    if (!ok) {
+                        this.isStopping = false;
+                        this.updateButtons();
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('超长会话确认时发生异常，继续保存:', e);
+            }
             
-            // 保存记录
-            await this.saveRecord({
-                activity: this.currentActivity,
-                startTime: new Date(this.startTime),
-                endTime: endTime,
-                duration: duration,
-                date: endTime.toDateString(),
-                dateKey: this.getDateKey(endTime),
-                sessionId: this.currentSessionId
-            });
+            // 保存记录（跨午夜自动拆分到各自日期）
+            const startDateKey = this.getDateKey(new Date(startMs));
+            const endDateKey = this.getDateKey(new Date(endMs));
+            if (startDateKey !== endDateKey) {
+                // 逐日拆分
+                const segments = [];
+                let segStart = startMs;
+                while (segStart < endMs) {
+                    const segStartDate = new Date(segStart);
+                    const dayStart = new Date(segStartDate.getFullYear(), segStartDate.getMonth(), segStartDate.getDate(), 0, 0, 0, 0);
+                    const dayEnd = new Date(dayStart);
+                    dayEnd.setDate(dayStart.getDate() + 1);
+                    const segEnd = Math.min(endMs, dayEnd.getTime());
+                    segments.push({
+                        activity: this.currentActivity,
+                        startTime: new Date(segStart),
+                        endTime: new Date(segEnd),
+                        duration: segEnd - segStart,
+                        date: new Date(segEnd).toDateString(),
+                        dateKey: this.getDateKey(new Date(segEnd)),
+                        sessionId: `${this.currentSessionId}_${segments.length + 1}`
+                    });
+                    segStart = segEnd;
+                }
+                for (const seg of segments) {
+                    await this.saveRecord(seg);
+                }
+            } else {
+                await this.saveRecord({
+                    activity: this.currentActivity,
+                    startTime: new Date(startMs),
+                    endTime: new Date(endMs),
+                    duration: duration,
+                    date: new Date(endMs).toDateString(),
+                    dateKey: this.getDateKey(new Date(endMs)),
+                    sessionId: this.currentSessionId
+                });
+            }
             
             // 清除保存的计时状态
             this.clearTimerState();
@@ -503,8 +552,45 @@ class TimeTracker {
     // 根据云端文档应用活动计时状态
     applyActiveTimerDoc(data) {
         if (!data) return;
-        // 如果本地没有在运行，采用云端状态
+        // 如果本地没有在运行，考虑采用云端状态（带保护）
         if (!this.isRunning) {
+            // 解析时间字段
+            const nowMs = Date.now();
+            const startMs = (typeof data.startTime === 'number')
+                ? data.startTime
+                : (data.startTime && typeof data.startTime.toDate === 'function')
+                    ? data.startTime.toDate().getTime()
+                    : null;
+            const updatedAtMs = (data.updatedAt && typeof data.updatedAt.toDate === 'function')
+                ? data.updatedAt.toDate().getTime()
+                : (typeof data.updatedAt === 'number')
+                    ? data.updatedAt
+                    : null;
+
+            // 定义保护条件：云端状态陈旧（>1小时未更新）或跨午夜
+            const STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1小时
+            const isStale = updatedAtMs ? (nowMs - updatedAtMs > STALE_THRESHOLD_MS) : false;
+            const crossesMidnight = startMs ? (this.getDateKey(new Date(startMs)) !== this.getDateKey(new Date(nowMs))) : false;
+
+            if (data.isRunning && (isStale || crossesMidnight)) {
+                // 保护：不采纳陈旧/跨午夜的云端运行状态，清理并重置本地显示
+                console.warn('检测到云端活动计时状态陈旧或跨午夜，忽略并清理:', { isStale, crossesMidnight, updatedAtMs, startMs });
+                this.isRunning = false;
+                this.isPaused = false;
+                this.currentActivity = null;
+                this.currentSessionId = this.currentSessionId;
+                this.startTime = null;
+                this.pausedTime = 0;
+                this.updateButtons();
+                this.updateCurrentActivity();
+                this.updateDisplay();
+                this.stopTimer();
+                // 尝试清理云端活动状态（容错）
+                this.clearActiveTimerCloud().catch(e => console.warn('清理陈旧云端计时状态失败:', e));
+                return;
+            }
+
+            // 采纳云端状态
             this.isRunning = !!data.isRunning;
             this.isPaused = !!data.isPaused;
             this.currentActivity = data.currentActivity || this.currentActivity;
@@ -674,10 +760,10 @@ class TimeTracker {
                 return;
             }
 
-            // 保存最新的记录到云端
-            const latestRecord = this.records[this.records.length - 1];
-            if (latestRecord && !latestRecord.id) {
-                await this.saveRecordToCloud(latestRecord);
+            // 保存所有尚未同步到云端的记录
+            const unsynced = this.records.filter(r => !r.id);
+            for (const rec of unsynced) {
+                await this.saveRecordToCloud(rec);
             }
 
             // 同时保存到本地作为备份
