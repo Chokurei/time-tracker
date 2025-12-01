@@ -111,6 +111,7 @@ class TimeTracker {
         this.startBtn = document.getElementById('startBtn');
         this.pauseBtn = document.getElementById('pauseBtn');
         this.stopBtn = document.getElementById('stopBtn');
+        this.deleteLastBtn = document.getElementById('deleteLastBtn');
         
         // 其他元素
         this.todayStatsEl = document.getElementById('todayStats');
@@ -134,6 +135,9 @@ class TimeTracker {
         this.startBtn.addEventListener('click', () => this.start());
         this.pauseBtn.addEventListener('click', () => this.pause());
         this.stopBtn.addEventListener('click', () => this.stop());
+        if (this.deleteLastBtn) {
+            this.deleteLastBtn.addEventListener('click', () => this.deleteLastRecord());
+        }
         
         // 活动类型选择
         this.activityTypeEl.addEventListener('change', () => {
@@ -193,6 +197,18 @@ class TimeTracker {
                     // 右滑上一页，左滑下一页
                     this.changeCommentsPage(delta > 0 ? -1 : 1);
                 }
+            });
+        }
+        // 记录列表事件委托：删除按钮
+        if (this.recordsListEl) {
+            this.recordsListEl.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action="delete-record"]');
+                if (!btn) return;
+                const id = btn.dataset.id || '';
+                const sessionId = btn.dataset.sessionId || '';
+                const start = Number(btn.dataset.start || 0);
+                const end = Number(btn.dataset.end || 0);
+                this.deleteRecord({ id, sessionId, start, end });
             });
         }
     }
@@ -380,6 +396,9 @@ class TimeTracker {
         this.startBtn.disabled = this.isRunning && !this.isPaused;
         this.pauseBtn.disabled = !this.isRunning || this.isPaused;
         this.stopBtn.disabled = !this.isRunning || this.isStopping;
+        if (this.deleteLastBtn) {
+            this.deleteLastBtn.disabled = !(this.records && this.records.length > 0);
+        }
         
         // 更新按钮文本
         if (this.isPaused) {
@@ -969,6 +988,8 @@ class TimeTracker {
             const date = new Date(record.startTime);
             const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
             const dateStr = date.toLocaleDateString('zh-CN');
+            const startMs = new Date(record.startTime).getTime();
+            const endMs = new Date(record.endTime).getTime();
             
             return `
                 <div class="record-item">
@@ -982,12 +1003,78 @@ class TimeTracker {
                         </div>
                     </div>
                     <div class="record-duration">${this.formatDuration(record.duration)}</div>
+                    <div class="record-ops">
+                        <button class="btn btn-outline" data-action="delete-record" data-id="${record.id || ''}" data-session-id="${record.sessionId || ''}" data-start="${startMs}" data-end="${endMs}">
+                            <i class="fas fa-trash"></i> 删除
+                        </button>
+                    </div>
                 </div>
             `;
         }).join('');
         
         recordsList.innerHTML = html;
         console.log('✅ 记录渲染完成');
+    }
+
+    async deleteLastRecord() {
+        if (!this.records || this.records.length === 0) return;
+        const latest = this.records[this.records.length - 1];
+        const payload = {
+            id: latest.id || '',
+            sessionId: latest.sessionId || '',
+            start: new Date(latest.startTime).getTime(),
+            end: new Date(latest.endTime).getTime()
+        };
+        await this.deleteRecord(payload);
+    }
+
+    async deleteRecord(identifier) {
+        try {
+            const ok = window.confirm('确定删除该记录吗？此操作不可撤销。');
+            if (!ok) return;
+
+            const idx = this.records.findIndex(r =>
+                (identifier.id && r.id === identifier.id) ||
+                (identifier.sessionId && r.sessionId === identifier.sessionId) ||
+                (identifier.start && identifier.end && r.startTime && r.endTime &&
+                 new Date(r.startTime).getTime() === identifier.start && new Date(r.endTime).getTime() === identifier.end)
+            );
+            if (idx < 0) return;
+            const target = this.records[idx];
+
+            // 云端删除（如果存在云端ID且非游客）
+            if (target.id && window.db && this.currentUser && !(window.authManager && window.authManager.isGuest())) {
+                try {
+                    const { doc, deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                    const ref = doc(window.db, 'timeRecords', target.id);
+                    await deleteDoc(ref);
+                    console.log('云端记录已删除:', target.id);
+                } catch (err) {
+                    console.warn('云端删除失败，继续删除本地:', err);
+                }
+            }
+
+            // 从待同步队列移除对应记录
+            if (this.pendingSync && this.pendingSync.length > 0) {
+                this.pendingSync = this.pendingSync.filter(r => {
+                    const sameId = target.id && r.id === target.id;
+                    const sameSession = target.sessionId && r.sessionId === target.sessionId;
+                    const sameTime = new Date(r.startTime).getTime() === new Date(target.startTime).getTime() && new Date(r.endTime).getTime() === new Date(target.endTime).getTime();
+                    return !(sameId || sameSession || sameTime);
+                });
+            }
+
+            // 本地删除并更新UI
+            this.records.splice(idx, 1);
+            this.saveLocalRecords();
+            this.renderRecords();
+            this.renderTodayStats();
+            if (this.renderDailyChart) this.renderDailyChart();
+            this.updateButtons();
+        } catch (error) {
+            console.error('删除记录失败:', error);
+            alert('删除失败，请稍后重试');
+        }
     }
 
     // 渲染留言列表
