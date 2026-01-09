@@ -553,8 +553,12 @@ class TimeTracker {
             if (snap.exists()) {
                 this.applyActiveTimerDoc(snap.data());
             } else {
-                // 文档不存在，确保本地界面在非运行时不误显示
-                if (!this.isRunning) {
+                // 文档不存在，说明云端无活动计时
+                if (this.isRunning) {
+                    console.log('云端计时文档不存在，停止本地计时');
+                    this.reset();
+                } else {
+                    // 确保本地界面在非运行时状态正确
                     this.isPaused = false;
                     this.currentActivity = null;
                     this.pausedTime = 0;
@@ -571,8 +575,48 @@ class TimeTracker {
     // 根据云端文档应用活动计时状态
     applyActiveTimerDoc(data) {
         if (!data) return;
-        // 如果本地没有在运行，考虑采用云端状态（带保护）
-        if (!this.isRunning) {
+
+        const cloudIsRunning = !!data.isRunning;
+        const cloudIsPaused = !!data.isPaused;
+
+        // 情况1：本地在运行，但云端已停止 -> 停止本地
+        if (this.isRunning && !cloudIsRunning) {
+            console.log('🔄 检测到云端已停止，同步本地状态');
+            this.reset();
+            return;
+        }
+
+        // 情况2：本地在运行，云端也在运行 -> 检查暂停状态是否一致
+        if (this.isRunning && cloudIsRunning) {
+            if (this.isPaused !== cloudIsPaused) {
+                if (cloudIsPaused) {
+                    // 云端暂停
+                    console.log('🔄 检测到云端已暂停，同步本地状态');
+                    this.isPaused = true;
+                    this.pausedTime = typeof data.pausedTime === 'number' ? data.pausedTime : (Date.now() - this.startTime);
+                    this.stopTimer();
+                } else {
+                    // 云端继续
+                    console.log('🔄 检测到云端已继续，同步本地状态');
+                    this.isPaused = false;
+                    // 同步开始时间
+                    if (data.startTime) {
+                        this.startTime = (typeof data.startTime === 'number')
+                            ? data.startTime
+                            : (data.startTime && typeof data.startTime.toDate === 'function')
+                                ? data.startTime.toDate().getTime()
+                                : this.startTime;
+                    }
+                    this.startTimer();
+                }
+                this.updateButtons();
+                this.saveTimerState();
+            }
+            return;
+        }
+
+        // 情况3：本地未运行，云端在运行 -> 启动本地
+        if (!this.isRunning && cloudIsRunning) {
             // 解析时间字段
             const nowMs = Date.now();
             const startMs = (typeof data.startTime === 'number')
@@ -591,39 +635,32 @@ class TimeTracker {
             const isStale = updatedAtMs ? (nowMs - updatedAtMs > STALE_THRESHOLD_MS) : false;
             const crossesMidnight = startMs ? (this.getDateKey(new Date(startMs)) !== this.getDateKey(new Date(nowMs))) : false;
 
-            if (data.isRunning && (isStale || crossesMidnight)) {
+            if (isStale || crossesMidnight) {
                 // 保护：不采纳陈旧/跨午夜的云端运行状态，清理并重置本地显示
                 console.warn('检测到云端活动计时状态陈旧或跨午夜，忽略并清理:', { isStale, crossesMidnight, updatedAtMs, startMs });
-                this.isRunning = false;
-                this.isPaused = false;
-                this.currentActivity = null;
-                this.currentSessionId = this.currentSessionId;
-                this.startTime = null;
-                this.pausedTime = 0;
-                this.updateButtons();
-                this.updateCurrentActivity();
-                this.updateDisplay();
-                this.stopTimer();
-                // 尝试清理云端活动状态（容错）
+                // 尝试清理云端活动状态
                 this.clearActiveTimerCloud().catch(e => console.warn('清理陈旧云端计时状态失败:', e));
                 return;
             }
 
             // 采纳云端状态
-            this.isRunning = !!data.isRunning;
-            this.isPaused = !!data.isPaused;
+            this.isRunning = true;
+            this.isPaused = cloudIsPaused;
             this.currentActivity = data.currentActivity || this.currentActivity;
             this.currentSessionId = data.currentSessionId || this.currentSessionId;
-            this.startTime = typeof data.startTime === 'number' ? data.startTime : this.startTime;
+            this.startTime = startMs || this.startTime;
             this.pausedTime = typeof data.pausedTime === 'number' ? data.pausedTime : 0;
+            
             this.updateButtons();
             this.updateCurrentActivity();
             this.updateDisplay();
-            if (this.isRunning && !this.isPaused) {
+            
+            if (!this.isPaused) {
                 this.startTimer();
             } else {
                 this.stopTimer();
             }
+            this.saveTimerState();
         }
     }
 
