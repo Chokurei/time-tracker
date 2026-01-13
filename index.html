@@ -119,6 +119,30 @@
                 </div>
             </section>
 
+            <section class="manual-section">
+                <h2>手动录入</h2>
+                <div class="activity-selector">
+                    <label for="manualActivityType">选择活动类型：</label>
+                    <select id="manualActivityType">
+                        <option value="work">工作</option>
+                        <option value="study">学习</option>
+                        <option value="exercise">运动</option>
+                        <option value="rest">休息</option>
+                        <option value="entertainment">娱乐</option>
+                        <option value="meeting">会议</option>
+                        <option value="chores">杂务</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <input type="text" id="manualCustomActivity" placeholder="自定义活动名称" style="display: none;">
+                </div>
+                <div class="manual-inputs" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px;">
+                    <input id="manualStart" type="datetime-local" />
+                    <input id="manualEnd" type="datetime-local" />
+                    <button id="manualAddBtn" class="btn btn-primary"><i class="fas fa-plus"></i> 添加记录</button>
+                </div>
+                <div id="manualError" style="text-align:center;color:#dc3545;margin-top:8px;"></div>
+            </section>
+
             <!-- 今日统计 -->
             <section class="stats-section">
                 <h2>今日统计</h2>

@@ -128,6 +128,12 @@ class TimeTracker {
         this.commentsPrevEl = document.getElementById('commentsPrev');
         this.commentsNextEl = document.getElementById('commentsNext');
         this.commentsPageInfoEl = document.getElementById('commentsPageInfo');
+        this.manualActivityTypeEl = document.getElementById('manualActivityType');
+        this.manualCustomActivityEl = document.getElementById('manualCustomActivity');
+        this.manualStartEl = document.getElementById('manualStart');
+        this.manualEndEl = document.getElementById('manualEnd');
+        this.manualAddBtn = document.getElementById('manualAddBtn');
+        this.manualErrorEl = document.getElementById('manualError');
     }
 
     bindEvents() {
@@ -210,6 +216,19 @@ class TimeTracker {
                 const end = Number(btn.dataset.end || 0);
                 this.deleteRecord({ id, sessionId, start, end });
             });
+        }
+        if (this.manualActivityTypeEl) {
+            this.manualActivityTypeEl.addEventListener('change', () => {
+                if (this.manualActivityTypeEl.value === 'other') {
+                    this.manualCustomActivityEl.style.display = 'block';
+                    this.manualCustomActivityEl.focus();
+                } else {
+                    this.manualCustomActivityEl.style.display = 'none';
+                }
+            });
+        }
+        if (this.manualAddBtn) {
+            this.manualAddBtn.addEventListener('click', () => this.handleManualAdd());
         }
     }
 
@@ -1051,6 +1070,107 @@ class TimeTracker {
         
         recordsList.innerHTML = html;
         console.log('✅ 记录渲染完成');
+    }
+
+    async handleManualAdd() {
+        if (!this.manualStartEl || !this.manualEndEl || !this.manualActivityTypeEl) return;
+        const startVal = this.manualStartEl.value;
+        const endVal = this.manualEndEl.value;
+        const type = this.manualActivityTypeEl.value;
+        const custom = this.manualCustomActivityEl ? this.manualCustomActivityEl.value : '';
+        if (!startVal || !endVal) {
+            if (this.manualErrorEl) this.manualErrorEl.textContent = '请输入开始与结束时间';
+            return;
+        }
+        const start = new Date(startVal);
+        const end = new Date(endVal);
+        if (!(start instanceof Date) || isNaN(start.getTime()) || !(end instanceof Date) || isNaN(end.getTime())) {
+            if (this.manualErrorEl) this.manualErrorEl.textContent = '时间格式不正确';
+            return;
+        }
+        if (end.getTime() <= start.getTime()) {
+            if (this.manualErrorEl) this.manualErrorEl.textContent = '结束时间必须晚于开始时间';
+            return;
+        }
+        const activityName = this.getActivityNameFromType(type, custom);
+        const baseSessionId = `manual_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+        const startKey = this.getDateKey(start);
+        const endKey = this.getDateKey(end);
+        if (startKey !== endKey) {
+            const segments = this.splitAcrossMidnight(start, end, activityName, baseSessionId, type);
+            for (const seg of segments) {
+                await this.saveRecord(seg);
+            }
+        } else {
+            const duration = end.getTime() - start.getTime();
+            await this.saveRecord({
+                userId: this.currentUser ? this.currentUser.uid : null,
+                activity: activityName,
+                type,
+                startTime: new Date(start),
+                endTime: new Date(end),
+                duration,
+                date: end.toDateString(),
+                dateKey: this.getDateKey(end),
+                sessionId: baseSessionId
+            });
+        }
+        if (this.manualErrorEl) this.manualErrorEl.textContent = '';
+        if (this.manualStartEl) this.manualStartEl.value = '';
+        if (this.manualEndEl) this.manualEndEl.value = '';
+        if (this.manualActivityTypeEl) this.manualActivityTypeEl.value = 'work';
+        if (this.manualCustomActivityEl) {
+            this.manualCustomActivityEl.value = '';
+            this.manualCustomActivityEl.style.display = 'none';
+        }
+        this.renderTodayStats();
+        this.renderRecords();
+        this.renderCalendar();
+        this.renderDailyChart();
+    }
+
+    getActivityNameFromType(type, custom) {
+        const map = {
+            work: '工作',
+            study: '学习',
+            exercise: '运动',
+            rest: '休息',
+            entertainment: '娱乐',
+            meeting: '会议',
+            chores: '杂务',
+            other: '其他'
+        };
+        if (type === 'other') {
+            return custom && custom.trim() ? custom.trim() : '其他';
+        }
+        return map[type] || '未知';
+    }
+
+    splitAcrossMidnight(start, end, activityName, baseSessionId, type) {
+        const segments = [];
+        let segStart = start.getTime();
+        const endMs = end.getTime();
+        let idx = 0;
+        while (segStart < endMs) {
+            const d = new Date(segStart);
+            const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+            const dayEnd = new Date(dayStart);
+            dayEnd.setDate(dayStart.getDate() + 1);
+            const segEnd = Math.min(endMs, dayEnd.getTime());
+            segments.push({
+                userId: this.currentUser ? this.currentUser.uid : null,
+                activity: activityName,
+                type,
+                startTime: new Date(segStart),
+                endTime: new Date(segEnd),
+                duration: segEnd - segStart,
+                date: new Date(segEnd).toDateString(),
+                dateKey: this.getDateKey(new Date(segEnd)),
+                sessionId: `${baseSessionId}_${++idx}`
+            });
+            segStart = segEnd;
+        }
+        return segments;
     }
 
     async deleteLastRecord() {

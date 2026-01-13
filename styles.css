@@ -415,7 +415,8 @@ body {
 /* 统计区域 */
 .stats-section,
 .calendar-section,
-.records-section {
+.records-section,
+.manual-section {
     background: white;
     border-radius: 20px;
     padding: 30px;
@@ -424,7 +425,8 @@ body {
 
 .stats-section h2,
 .calendar-section h2,
-.records-section h2 {
+.records-section h2,
+.manual-section h2 {
     margin-bottom: 20px;
     color: #333;
     font-weight: 600;
@@ -868,7 +870,8 @@ body {
 .timer-section,
 .stats-section,
 .calendar-section,
-.records-section {
+.records-section,
+.manual-section {
     animation: fadeIn 0.6s ease-out;
 }
 
